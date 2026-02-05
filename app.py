@@ -694,6 +694,8 @@ if page == "Dashboard":
     n_neg = len(fdf[fdf["Stage"]=="Negotiations"])
     top5p = cu.head(5)["Value"].sum()/cu["Value"].sum()*100 if len(cu) and cu["Value"].sum()>0 else 0
 
+    reg_lead = f"with <b>{top_reg}</b> leading at <b>{fc(rg.iloc[0]['Value'])}</b>" if len(rg) else ""
+
     st.markdown(f"""
     <div class="es">
         The Solutions team is currently managing <b>{n_opp} active opportunities</b> representing
@@ -715,7 +717,7 @@ if page == "Dashboard":
         <br><br>
 
         <b>Regional coverage:</b> Pipeline spans <b>{fdf['Owner Role'].nunique()} regions</b>
-        with {top_reg} leading at {fc(rg.iloc[0]['Value'])} if len(rg) else ''.
+        {reg_lead}.
         <b>{fdf['Solution Resource'].nunique()} Solution Resources</b> are actively engaged.
 
         <br><br>
