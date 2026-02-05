@@ -696,38 +696,28 @@ if page == "Dashboard":
 
     reg_lead = f"with <b>{top_reg}</b> leading at <b>{fc(rg.iloc[0]['Value'])}</b>" if len(rg) else ""
 
-    st.markdown(f"""
-    <div class="es">
-        The Solutions team is currently managing <b>{n_opp} active opportunities</b> representing
-        a total pipeline value of <b>{fc(total)}</b> across <b>{n_cust} unique customers</b>
-        and <b>{n_svc} service categories</b>.
-
-        <br><br>
-
-        <b>Stage composition:</b> {n_des} opportunities are in Solutions Design ({pct(n_des,n_opp)}),
-        {n_pro} in Proposal/Price Quote, {n_neg} in Negotiations, and {len(lost)} were Closed/Lost
-        ({fc(lost['Opportunity PAR'].sum())} lost value).
-
-        <br><br>
-
-        <b>Customer concentration:</b> The top 5 accounts represent <b>{top5p:.0f}%</b> of pipeline value,
-        led by <b>{top_c}</b> at {fc(top_cv)}. This is a notable concentration risk.
-        The dominant service type is <b>{top_sv}</b>.
-
-        <br><br>
-
-        <b>Regional coverage:</b> Pipeline spans <b>{fdf['Owner Role'].nunique()} regions</b>
-        {reg_lead}.
-        <b>{fdf['Solution Resource'].nunique()} Solution Resources</b> are actively engaged.
-
-        <br><br>
-
-        <b>Attention items:</b> <b>{len(past_due)} opportunities</b> ({fc(past_due['Opportunity PAR'].sum())})
-        have close dates that have already passed.
-        <b>{len(aging_60)} opportunities</b> have been in their current stage for over 60 days.
-        Average stage duration stands at <b>{avg_dur:.0f} days</b>.
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"""<div class="es">
+The Solutions team is currently managing <b>{n_opp} active opportunities</b> representing
+a total pipeline value of <b>{fc(total)}</b> across <b>{n_cust} unique customers</b>
+and <b>{n_svc} service categories</b>.
+<br><br>
+<b>Stage composition:</b> {n_des} opportunities are in Solutions Design ({pct(n_des,n_opp)}),
+{n_pro} in Proposal/Price Quote, {n_neg} in Negotiations, and {len(lost)} were Closed/Lost
+({fc(lost['Opportunity PAR'].sum())} lost value).
+<br><br>
+<b>Customer concentration:</b> The top 5 accounts represent <b>{top5p:.0f}%</b> of pipeline value,
+led by <b>{top_c}</b> at {fc(top_cv)}. This is a notable concentration risk.
+The dominant service type is <b>{top_sv}</b>.
+<br><br>
+<b>Regional coverage:</b> Pipeline spans <b>{fdf['Owner Role'].nunique()} regions</b>
+{reg_lead}.
+<b>{fdf['Solution Resource'].nunique()} Solution Resources</b> are actively engaged.
+<br><br>
+<b>Attention items:</b> <b>{len(past_due)} opportunities</b> ({fc(past_due['Opportunity PAR'].sum())})
+have close dates that have already passed.
+<b>{len(aging_60)} opportunities</b> have been in their current stage for over 60 days.
+Average stage duration stands at <b>{avg_dur:.0f} days</b>.
+</div>""", unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
