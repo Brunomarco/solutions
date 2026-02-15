@@ -1,1264 +1,1075 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
-from datetime import datetime, timedelta
-import io
-import re
-import warnings
-warnings.filterwarnings("ignore")
+from io import BytesIO
+from datetime import datetime
 
-# ──────────────────────────────────────────────────────────────────────────────
-# PAGE CONFIG
-# ──────────────────────────────────────────────────────────────────────────────
-st.set_page_config(
-    page_title="Marken Solutions Pipeline",
-    page_icon="🔬",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+# ═══════════════════════════════════════════════════════════════════════════════
+# CONFIG
+# ═══════════════════════════════════════════════════════════════════════════════
+st.set_page_config(page_title="Solutions Pipeline | Marken", page_icon="📋", layout="wide", initial_sidebar_state="expanded")
 
-# ──────────────────────────────────────────────────────────────────────────────
-# MARKEN DESIGN SYSTEM
-# ──────────────────────────────────────────────────────────────────────────────
-MARKEN = {
-    "navy":       "#003B5C",
-    "dark_navy":  "#00263A",
-    "teal":       "#0091DA",
-    "teal_light": "#5CB8B2",
-    "pale_teal":  "#A7D6D4",
-    "bg_light":   "#E8F4F8",
-    "gold":       "#D4A843",
-    "green":      "#2E8B57",
-    "red":        "#C0392B",
-    "orange":     "#E67E22",
-    "white":      "#FFFFFF",
-    "gray_50":    "#FAFBFD",
-    "gray_100":   "#F0F4F8",
-    "gray_200":   "#E2E8F0",
-    "gray_400":   "#94A3B8",
-    "gray_600":   "#64748B",
-    "gray_800":   "#1E293B",
-    "text":       "#1A2332",
-}
+# ── Marken Brand Palette ─────────────────────────────────────────────────────
+NY    = "#002B49"    # Marken navy
+NY2   = "#003A63"
+TL    = "#00857C"    # Marken teal
+TLL   = "#E8F5F3"
+GD    = "#FFB500"    # UPS gold
+W     = "#FFFFFF"
+G50   = "#FAFBFC"
+G100  = "#F4F5F7"
+G200  = "#E1E4E8"
+G400  = "#A0A8B4"
+G600  = "#6B7280"
+G800  = "#2D3748"
+BA    = "#2E86AB"
+RD    = "#DC3545"
+GN    = "#28A745"
+OR    = "#E06C47"
+AM    = "#F6AD55"   # Amber for Pending status
+SEQ   = [NY, TL, GD, BA, "#6C5B7B", OR, GN, "#9B59B6", "#F39C12", "#1ABC9C"]
 
-PALETTE_SEQ = [
-    MARKEN["navy"], MARKEN["teal"], MARKEN["teal_light"],
-    MARKEN["gold"], MARKEN["green"], MARKEN["orange"],
-    MARKEN["pale_teal"], MARKEN["red"], MARKEN["gray_600"],
-]
-
-# ──────────────────────────────────────────────────────────────────────────────
-# CUSTOM CSS
-# ──────────────────────────────────────────────────────────────────────────────
-st.markdown("""
+# ── CSS ──────────────────────────────────────────────────────────────────────
+st.markdown(f"""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@300;400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Instrument+Serif&display=swap');
+.stApp {{ background:{G50}; font-family:'DM Sans',sans-serif; color:{G800}; }}
+h1,h2,h3,h4 {{ font-family:'DM Sans',sans-serif; color:{NY}; }}
 
-    /* ── Global ─────────────────────────────────────────────── */
-    html, body, [class*="css"] {
-        font-family: 'Source Sans Pro', 'Segoe UI', 'Helvetica Neue', sans-serif;
-        color: #1A2332;
-    }
-    .block-container { padding-top: 1.5rem; padding-bottom: 1rem; max-width: 1280px; }
-    h1, h2, h3, h4, h5, h6 { font-family: 'Source Sans Pro', sans-serif; }
+/* Sidebar */
+section[data-testid="stSidebar"] {{ background:{NY}; }}
+section[data-testid="stSidebar"] * {{ color:{W} !important; font-family:'DM Sans',sans-serif; }}
+section[data-testid="stSidebar"] hr {{ border-color:rgba(255,255,255,0.12); }}
 
-    /* ── Sidebar ────────────────────────────────────────────── */
-    [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #00263A 0%, #003B5C 100%);
-    }
-    [data-testid="stSidebar"] * {
-        color: #E8F4F8 !important;
-    }
-    [data-testid="stSidebar"] .stSelectbox label,
-    [data-testid="stSidebar"] .stMultiSelect label,
-    [data-testid="stSidebar"] .stSlider label,
-    [data-testid="stSidebar"] .stDateInput label {
-        color: #A7D6D4 !important;
-        font-weight: 600;
-        font-size: 0.8rem;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-    }
+/* Header */
+.rh {{ background:linear-gradient(135deg, {NY} 0%, {NY2} 100%); padding:1.6rem 2rem 1.4rem; border-radius:6px; margin-bottom:1.1rem;
+    display:flex; justify-content:space-between; align-items:flex-end; }}
+.rh-b {{ font-size:.6rem; font-weight:600; letter-spacing:.22em; text-transform:uppercase; color:{GD}; margin-bottom:.3rem; }}
+.rh-t {{ font-family:'Instrument Serif',Georgia,serif; font-size:1.5rem; color:{W}; line-height:1.2; }}
+.rh-s {{ font-size:.76rem; color:rgba(255,255,255,0.5); margin-top:.2rem; }}
+.rh-r {{ text-align:right; }}
+.rh-d {{ font-size:.7rem; color:rgba(255,255,255,0.45); }}
+.rh-c {{ font-size:.56rem; color:{GD}; font-weight:600; letter-spacing:.12em; text-transform:uppercase; margin-top:.12rem; }}
 
-    /* ── KPI Cards ──────────────────────────────────────────── */
-    .kpi-card {
-        background: linear-gradient(135deg, #003B5C 0%, #00263A 100%);
-        border-radius: 10px;
-        padding: 1.25rem 1.5rem;
-        color: white;
-        position: relative;
-        overflow: hidden;
-        min-height: 120px;
-    }
-    .kpi-card::after {
-        content: '';
-        position: absolute;
-        top: -30px; right: -30px;
-        width: 100px; height: 100px;
-        background: rgba(0,145,218,0.12);
-        border-radius: 50%;
-    }
-    .kpi-label {
-        font-size: 0.72rem;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: #A7D6D4;
-        font-weight: 600;
-        margin-bottom: 6px;
-    }
-    .kpi-value {
-        font-size: 1.85rem;
-        font-weight: 700;
-        color: white;
-        line-height: 1.1;
-        margin-bottom: 4px;
-    }
-    .kpi-sub {
-        font-size: 0.75rem;
-        color: #5CB8B2;
-        font-weight: 400;
-    }
+/* KPIs */
+.kr {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:.65rem; margin-bottom:1.1rem; }}
+.kp {{ background:{W}; border:1px solid {G200}; border-top:3px solid var(--ac,{TL}); border-radius:4px; padding:.85rem 1rem .75rem;
+    transition: box-shadow 0.2s ease; }}
+.kp:hover {{ box-shadow: 0 2px 8px rgba(0,43,73,0.08); }}
+.kp-l {{ font-size:.58rem; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:{G400}; margin-bottom:.22rem; }}
+.kp-v {{ font-size:1.4rem; font-weight:700; color:{NY}; letter-spacing:-.03em; line-height:1.1; }}
+.kp-d {{ font-size:.66rem; color:{G600}; margin-top:.1rem; }}
 
-    /* ── Accent KPI ─────────────────────────────────────────── */
-    .kpi-accent {
-        background: linear-gradient(135deg, #0091DA 0%, #003B5C 100%);
-    }
+/* Section */
+.sec {{ font-size:.63rem; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:{NY};
+    margin:1.4rem 0 .5rem 0; padding-bottom:.3rem; border-bottom:2px solid {TL}; display:inline-block; }}
 
-    /* ── Section Headers ────────────────────────────────────── */
-    .section-header {
-        border-left: 4px solid #0091DA;
-        padding-left: 14px;
-        margin: 2.5rem 0 1rem 0;
-    }
-    .section-header h2 {
-        font-size: 1.3rem;
-        font-weight: 700;
-        color: #003B5C;
-        margin: 0;
-        line-height: 1.2;
-    }
-    .section-header p {
-        font-size: 0.82rem;
-        color: #64748B;
-        margin: 3px 0 0 0;
-    }
+/* Insight callout — the "so what" above each chart (MBB style) */
+.so {{ font-size:.78rem; color:{NY}; font-weight:600; margin:0 0 .6rem 0; line-height:1.4; }}
 
-    /* ── Insight Box ─────────────────────────────────────────── */
-    .insight-box {
-        background: #E8F4F8;
-        border-left: 3px solid #0091DA;
-        border-radius: 0 8px 8px 0;
-        padding: 12px 16px;
-        margin: 10px 0;
-        font-size: 0.85rem;
-        color: #003B5C;
-        line-height: 1.5;
-    }
-    .insight-box strong { color: #00263A; }
+/* Summary box */
+.es {{ background:{W}; border-left:4px solid {TL}; border-radius:0 4px 4px 0;
+    padding:1rem 1.3rem; font-size:.8rem; line-height:1.65; color:{G800}; }}
+.es b {{ color:{NY}; }}
 
-    /* ── Status Badges ──────────────────────────────────────── */
-    .status-working {
-        background: #E8F4F8; color: #0091DA;
-        padding: 3px 10px; border-radius: 12px;
-        font-size: 0.75rem; font-weight: 600;
-        display: inline-block;
-    }
-    .status-pending {
-        background: #FDF2E0; color: #D4A843;
-        padding: 3px 10px; border-radius: 12px;
-        font-size: 0.75rem; font-weight: 600;
-        display: inline-block;
-    }
-    .status-unassigned {
-        background: #F0F4F8; color: #94A3B8;
-        padding: 3px 10px; border-radius: 12px;
-        font-size: 0.75rem; font-weight: 600;
-        display: inline-block;
-    }
+/* Alert box */
+.al {{ background:#FFF3CD; border:1px solid #FFEAA7; border-radius:4px;
+    padding:.75rem 1rem; font-size:.78rem; color:#856404; margin-bottom:.6rem; }}
+.al-r {{ background:#F8D7DA; border:1px solid #F5C6CB; color:#721C24; }}
 
-    /* ── Header Bar ──────────────────────────────────────────── */
-    .header-bar {
-        background: linear-gradient(135deg, #003B5C 0%, #00263A 100%);
-        padding: 1.5rem 2rem;
-        border-radius: 12px;
-        margin-bottom: 1.5rem;
-        position: relative;
-        overflow: hidden;
-    }
-    .header-bar::before {
-        content: '';
-        position: absolute;
-        top: 0; right: 0;
-        width: 300px; height: 100%;
-        background: linear-gradient(135deg, transparent 0%, rgba(0,145,218,0.08) 100%);
-    }
-    .header-bar h1 {
-        color: white;
-        font-size: 1.6rem;
-        font-weight: 700;
-        margin: 0 0 2px 0;
-        letter-spacing: -0.01em;
-    }
-    .header-bar .subtitle {
-        color: #A7D6D4;
-        font-size: 0.85rem;
-        font-weight: 400;
-    }
-    .header-bar .marken-label {
-        color: #5CB8B2;
-        font-size: 0.68rem;
-        text-transform: uppercase;
-        letter-spacing: 0.12em;
-        font-weight: 600;
-        margin-bottom: 4px;
-    }
+/* Workflow */
+.wf {{ background:{TLL}; border:1px solid {TL}33; border-radius:4px;
+    padding:1rem 1.2rem; font-size:.8rem; line-height:1.5; color:{G800}; margin-bottom:.8rem; }}
+.wf b {{ color:{NY}; }}
+.ws {{ display:inline-flex; align-items:center; background:{NY}; color:{W};
+    font-size:.62rem; font-weight:600; padding:.15rem .5rem; border-radius:3px; margin-right:.2rem; }}
 
-    /* ── Table styling ───────────────────────────────────────── */
-    .stDataFrame { border-radius: 8px; overflow: hidden; }
+/* Status badges */
+.sb {{ display:inline-block; padding:.15rem .55rem; border-radius:3px; font-size:.65rem; font-weight:600; letter-spacing:.04em; }}
+.sb-w {{ background:#D4EDDA; color:#155724; }}
+.sb-p {{ background:#FFF3CD; color:#856404; }}
+.sb-u {{ background:{G100}; color:{G600}; }}
 
-    /* ── Tab styling ─────────────────────────────────────────── */
-    .stTabs [data-baseweb="tab-list"] { gap: 0; }
-    .stTabs [data-baseweb="tab"] {
-        padding: 8px 20px;
-        font-weight: 600;
-        font-size: 0.85rem;
-    }
+/* Footer */
+.ft {{ text-align:center; padding:1.5rem 0 .6rem; font-size:.58rem; color:{G400}; letter-spacing:.06em; }}
 
-    /* ── Divider ─────────────────────────────────────────────── */
-    .subtle-divider {
-        border: none;
-        height: 1px;
-        background: linear-gradient(90deg, transparent, #E2E8F0, transparent);
-        margin: 2rem 0;
-    }
-
-    /* ── Hide Streamlit branding ─────────────────────────────── */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
+#MainMenu, footer, header {{ visibility:hidden; }}
+.stDownloadButton button {{
+    background:{NY} !important; color:{W} !important; border:none !important;
+    font-family:'DM Sans',sans-serif !important; font-weight:600 !important; font-size:.76rem !important;
+}}
 </style>
 """, unsafe_allow_html=True)
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# CONSTANTS & HELPERS
+# ═══════════════════════════════════════════════════════════════════════════════
+SF_COLS   = ["Stage","Solution Resource","Account Name","Owner Role","Opportunity Name",
+             "Opportunity Owner","Main Primary Service","Opportunity PAR","Stage Duration",
+             "Close Date","Notes","Status","Received by Solutions","Closed by Solutions","Product"]
+TEAM_COLS = ["Solutions Notes","Tasks","Action Items","Comments / Results"]
+ALL_COLS  = SF_COLS + TEAM_COLS
 
-# ──────────────────────────────────────────────────────────────────────────────
-# HELPER FUNCTIONS
-# ──────────────────────────────────────────────────────────────────────────────
-def parse_par(value):
-    """Parse Opportunity PAR values that can be int, float, or 'USD X,XXX' strings."""
-    if pd.isna(value):
-        return np.nan
-    if isinstance(value, (int, float)):
-        return float(value)
-    s = str(value).strip()
-    s = re.sub(r'[^\d.]', '', s.replace(',', ''))
+STAGE_ORDER = ["Information Gathering","Solutions Design","Proposal/Price Quote",
+               "Proposal Price/Quote","Negotiations","Closed/Won","Closed/Lost"]
+
+STATUS_COLORS = {"Working": GN, "Pending": AM, "Completed": BA}
+
+
+def parse_par(val):
+    """Parse Opportunity PAR handling both numeric and 'USD 360,000' formats."""
+    if pd.isna(val):
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val)
+    s = str(val).strip().upper().replace("USD", "").replace("$", "").replace(",", "").strip()
     try:
         return float(s)
     except ValueError:
-        return np.nan
+        return 0.0
 
 
-def parse_mixed_date(value):
-    """Parse dates from mixed formats (datetime objects and various string formats)."""
-    if pd.isna(value):
-        return pd.NaT
-    if isinstance(value, datetime):
-        return value
-    s = str(value).strip()
-    for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y', '%m/%d/%y', '%d/%m/%y'):
-        try:
-            return datetime.strptime(s, fmt)
-        except ValueError:
-            continue
-    try:
-        return pd.to_datetime(s, dayfirst=True)
-    except Exception:
-        return pd.NaT
+def clean_upload(df):
+    df = df.loc[:, ~df.columns.str.startswith("Unnamed")].copy()
+    # Normalize column names
+    rn = {}
+    for c in df.columns:
+        cl = c.strip()
+        for s in SF_COLS + TEAM_COLS:
+            if cl.lower().replace(" ", "") == s.lower().replace(" ", ""):
+                rn[c] = s
+    df.rename(columns=rn, inplace=True)
+
+    if "Opportunity PAR" in df.columns:
+        df["Opportunity PAR"] = df["Opportunity PAR"].apply(parse_par)
+    if "Stage Duration" in df.columns:
+        df["Stage Duration"] = pd.to_numeric(df["Stage Duration"], errors="coerce").fillna(0).astype(int)
+    if "Close Date" in df.columns:
+        df["Close Date"] = pd.to_datetime(df["Close Date"], errors="coerce", dayfirst=False).dt.strftime("%m/%d/%Y")
+    if "Received by Solutions" in df.columns:
+        df["Received by Solutions"] = pd.to_datetime(df["Received by Solutions"], errors="coerce", dayfirst=True)
+    if "Closed by Solutions" in df.columns:
+        df["Closed by Solutions"] = pd.to_datetime(df["Closed by Solutions"], errors="coerce", dayfirst=True)
+    if "Status" in df.columns:
+        df["Status"] = df["Status"].fillna("Unassigned")
+    if "Product" in df.columns:
+        df["Product"] = df["Product"].fillna("General")
+    return df.reset_index(drop=True)
 
 
-def fmt_currency(val, prefix="$"):
-    """Format number as currency."""
-    if pd.isna(val):
-        return "—"
-    if val >= 1_000_000:
-        return f"{prefix}{val/1_000_000:,.1f}M"
-    if val >= 1_000:
-        return f"{prefix}{val/1_000:,.0f}K"
-    return f"{prefix}{val:,.0f}"
+def merge_masterfile(master, new_sf):
+    for c in TEAM_COLS:
+        if c not in master.columns:
+            master[c] = ""
+    old_o = set(master["Opportunity Name"].dropna())
+    new_o = set(new_sf["Opportunity Name"].dropna())
+    upd = 0
+    for i, r in master.iterrows():
+        o = r.get("Opportunity Name")
+        if o in new_o:
+            m = new_sf[new_sf["Opportunity Name"] == o].iloc[0]
+            for c in SF_COLS:
+                if c in new_sf.columns:
+                    master.at[i, c] = m[c]
+            upd += 1
+    added = new_o - old_o
+    nr = new_sf[new_sf["Opportunity Name"].isin(added)].copy()
+    for c in TEAM_COLS:
+        nr[c] = ""
+    master = pd.concat([master, nr], ignore_index=True)
+    removed = old_o - new_o
+    for o in removed:
+        mask = master["Opportunity Name"] == o
+        master.loc[mask, "Solutions Notes"] = master.loc[mask, "Solutions Notes"].fillna("").astype(str) + " [Removed from SF]"
+    cols = [c for c in ALL_COLS if c in master.columns]
+    return master[cols].reset_index(drop=True), {"updated": upd, "added": len(added), "removed": len(removed), "total": len(master)}
 
 
-def fmt_number(val):
-    if pd.isna(val):
-        return "—"
-    return f"{val:,.0f}"
+def fc(v):
+    if pd.isna(v) or v == 0:
+        return "$0"
+    if abs(v) >= 1e6:
+        return f"${v/1e6:,.1f}M"
+    if abs(v) >= 1e3:
+        return f"${v/1e3:,.0f}K"
+    return f"${v:,.0f}"
 
 
-def section_header(title, subtitle=""):
-    st.markdown(f"""
-    <div class="section-header">
-        <h2>{title}</h2>
-        {"<p>" + subtitle + "</p>" if subtitle else ""}
-    </div>
-    """, unsafe_allow_html=True)
+def pct(part, whole):
+    return f"{part/whole*100:.0f}%" if whole else "0%"
 
 
-def insight(text):
-    st.markdown(f'<div class="insight-box">{text}</div>', unsafe_allow_html=True)
-
-
-def kpi_card(label, value, sub="", accent=False):
-    cls = "kpi-card kpi-accent" if accent else "kpi-card"
-    return f"""
-    <div class="{cls}">
-        <div class="kpi-label">{label}</div>
-        <div class="kpi-value">{value}</div>
-        <div class="kpi-sub">{sub}</div>
-    </div>
-    """
-
-
-def plotly_layout(fig, height=400, margin=None):
-    """Apply consistent Marken styling to all Plotly figures."""
-    if margin is None:
-        margin = dict(l=40, r=20, t=50, b=40)
+def pl(fig, h=340, mb=30):
     fig.update_layout(
-        height=height,
-        margin=margin,
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(family="Source Sans Pro, Segoe UI, sans-serif", color=MARKEN["text"], size=12),
-        title_font=dict(size=15, color=MARKEN["navy"], family="Source Sans Pro, sans-serif"),
-        legend=dict(
-            font=dict(size=11),
-            bgcolor="rgba(255,255,255,0.7)",
-            bordercolor=MARKEN["gray_200"],
-            borderwidth=1,
-        ),
-        hoverlabel=dict(
-            bgcolor=MARKEN["navy"],
-            font_size=12,
-            font_color="white",
-            font_family="Source Sans Pro, sans-serif",
-        ),
+        font=dict(family="DM Sans,sans-serif", size=11, color=G800),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        height=h, margin=dict(l=10, r=10, t=28, b=mb),
+        legend=dict(font=dict(size=9.5), orientation="h", y=-0.2, x=0.5, xanchor="center"),
     )
-    fig.update_xaxes(
-        gridcolor=MARKEN["gray_200"], gridwidth=0.5,
-        linecolor=MARKEN["gray_200"], zeroline=False,
-        tickfont=dict(size=11, color=MARKEN["gray_600"]),
-    )
-    fig.update_yaxes(
-        gridcolor=MARKEN["gray_200"], gridwidth=0.5,
-        linecolor=MARKEN["gray_200"], zeroline=False,
-        tickfont=dict(size=11, color=MARKEN["gray_600"]),
-    )
+    fig.update_xaxes(gridcolor=G200, showline=True, linecolor=G200, linewidth=1)
+    fig.update_yaxes(gridcolor=G200, showline=True, linecolor=G200, linewidth=1)
     return fig
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# DATA LOADING & CLEANING
-# ──────────────────────────────────────────────────────────────────────────────
-@st.cache_data
-def load_and_clean(file):
-    df = pd.read_excel(file)
-    # Strip whitespace from column names
-    df.columns = [c.strip() for c in df.columns]
-
-    # Parse PAR
-    if "Opportunity PAR" in df.columns:
-        df["PAR_clean"] = df["Opportunity PAR"].apply(parse_par)
-
-    # Parse dates
-    for dcol in ["Close Date", "Received by Solutions", "Closed by Solutions"]:
-        if dcol in df.columns:
-            df[dcol + "_dt"] = df[dcol].apply(parse_mixed_date)
-
-    # Stage Duration as numeric
-    if "Stage Duration" in df.columns:
-        df["Stage Duration"] = pd.to_numeric(df["Stage Duration"], errors="coerce")
-
-    # Fill status for display
-    if "Status" in df.columns:
-        df["Status_display"] = df["Status"].fillna("Not Assigned")
-
-    # Fill Product for display
-    if "Product" in df.columns:
-        df["Product_display"] = df["Product"].fillna("Not Specified")
-
-    return df
+def to_excel(df):
+    buf = BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as w:
+        df.to_excel(w, index=False, sheet_name="Masterfile")
+        ws = w.sheets["Masterfile"]
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        hf = PatternFill("solid", fgColor="002B49")
+        hw = Font(name="Calibri", bold=True, color="FFFFFF", size=10)
+        tf = PatternFill("solid", fgColor="E8F5F3")
+        bd = Border(*(Side(style="thin", color="E1E4E8"),) * 4)
+        for ci, cn in enumerate(df.columns, 1):
+            c = ws.cell(1, ci)
+            c.fill, c.font, c.border = hf, hw, bd
+            c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            if cn in TEAM_COLS:
+                for ri in range(2, len(df) + 2):
+                    ws.cell(ri, ci).fill = tf
+            ml = max(len(str(cn)), *(len(str(x)) for x in df[cn].head(50))) if len(df) else len(str(cn))
+            ws.column_dimensions[ws.cell(1, ci).column_letter].width = min(ml + 4, 42)
+        bf = Font(name="Calibri", size=10)
+        for ri in range(2, len(df) + 2):
+            for ci in range(1, len(df.columns) + 1):
+                c = ws.cell(ri, ci)
+                c.font, c.border = bf, bd
+                c.alignment = Alignment(vertical="center", wrap_text=True)
+    return buf.getvalue()
 
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# SESSION STATE
+# ═══════════════════════════════════════════════════════════════════════════════
+if "master" not in st.session_state:
+    st.session_state.master = None
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # SIDEBAR
-# ──────────────────────────────────────────────────────────────────────────────
-def render_sidebar(df):
-    with st.sidebar:
-        st.markdown("""
-        <div style="text-align:center; padding: 0.8rem 0 1.2rem 0;">
-            <div style="font-size:1.4rem; font-weight:700; color:white; letter-spacing:0.15em;">MARKEN</div>
-            <div style="font-size:0.65rem; color:#5CB8B2; text-transform:uppercase; letter-spacing:0.1em; margin-top:2px;">
-                A UPS Healthcare Company
-            </div>
-        </div>
-        <hr style="border:none; height:1px; background:rgba(255,255,255,0.15); margin:0 0 1rem 0;">
-        """, unsafe_allow_html=True)
-
-        st.markdown('<p style="font-size:0.72rem; color:#A7D6D4; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:8px;">Global Filters</p>', unsafe_allow_html=True)
-
-        filters = {}
-
-        # Region
-        if "Owner Role" in df.columns:
-            opts = sorted(df["Owner Role"].dropna().unique())
-            filters["region"] = st.multiselect("Region", opts, default=opts, key="f_region")
-
-        # Solution Resource
-        if "Solution Resource" in df.columns:
-            opts = sorted(df["Solution Resource"].dropna().unique())
-            filters["resource"] = st.multiselect("Solution Resource", opts, default=opts, key="f_resource")
-
-        # Service
-        if "Main Primary Service" in df.columns:
-            opts = sorted(df["Main Primary Service"].dropna().unique())
-            filters["service"] = st.multiselect("Primary Service", opts, default=opts, key="f_service")
-
-        # Status
-        if "Status_display" in df.columns:
-            opts = sorted(df["Status_display"].unique())
-            filters["status"] = st.multiselect("Status", opts, default=opts, key="f_status")
-
-        # Product
-        if "Product_display" in df.columns:
-            opts = sorted(df["Product_display"].unique())
-            filters["product"] = st.multiselect("Product", opts, default=opts, key="f_product")
-
-        # Opportunity Owner
-        if "Opportunity Owner" in df.columns:
-            opts = sorted(df["Opportunity Owner"].dropna().unique())
-            filters["owner"] = st.multiselect("Opportunity Owner", opts, default=opts, key="f_owner")
-
-        # PAR Range
-        if "PAR_clean" in df.columns:
-            par_min = float(df["PAR_clean"].min()) if not df["PAR_clean"].isna().all() else 0
-            par_max = float(df["PAR_clean"].max()) if not df["PAR_clean"].isna().all() else 1000000
-            if par_min < par_max:
-                filters["par_range"] = st.slider(
-                    "Pipeline Value Range (USD)",
-                    min_value=par_min, max_value=par_max,
-                    value=(par_min, par_max),
-                    format="$%,.0f",
-                    key="f_par",
-                )
-
-        st.markdown("<hr style='border:none; height:1px; background:rgba(255,255,255,0.15); margin:1rem 0;'>", unsafe_allow_html=True)
-
-        if st.button("↻  Reset All Filters", use_container_width=True):
-            st.rerun()
-
-        st.markdown("""
-        <div style="position:fixed; bottom:16px; left:16px; font-size:0.62rem; color:rgba(255,255,255,0.35);">
-            Solutions Pipeline Dashboard v1.0
-        </div>
-        """, unsafe_allow_html=True)
-
-    return filters
-
-
-def apply_filters(df, filters):
-    mask = pd.Series(True, index=df.index)
-    if "region" in filters and "Owner Role" in df.columns:
-        mask &= df["Owner Role"].isin(filters["region"])
-    if "resource" in filters and "Solution Resource" in df.columns:
-        mask &= df["Solution Resource"].isin(filters["resource"])
-    if "service" in filters and "Main Primary Service" in df.columns:
-        mask &= df["Main Primary Service"].fillna("Unknown").isin(filters["service"])
-    if "status" in filters and "Status_display" in df.columns:
-        mask &= df["Status_display"].isin(filters["status"])
-    if "product" in filters and "Product_display" in df.columns:
-        mask &= df["Product_display"].isin(filters["product"])
-    if "owner" in filters and "Opportunity Owner" in df.columns:
-        mask &= df["Opportunity Owner"].isin(filters["owner"])
-    if "par_range" in filters and "PAR_clean" in df.columns:
-        lo, hi = filters["par_range"]
-        mask &= (df["PAR_clean"].fillna(0) >= lo) & (df["PAR_clean"].fillna(0) <= hi)
-    return df[mask].copy()
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# MAIN DASHBOARD SECTIONS
-# ──────────────────────────────────────────────────────────────────────────────
-def render_header(df):
-    today = datetime.now().strftime("%B %d, %Y")
-    total_val = df["PAR_clean"].sum() if "PAR_clean" in df.columns else 0
+# ═══════════════════════════════════════════════════════════════════════════════
+with st.sidebar:
     st.markdown(f"""
-    <div class="header-bar">
-        <div class="marken-label">Solutions Team — Global Pipeline Dashboard</div>
-        <h1>Opportunity Pipeline Overview</h1>
-        <div class="subtitle">{len(df)} active opportunities · {fmt_currency(total_val)} total pipeline · Report date: {today}</div>
+    <div style="padding:1.1rem 0 .9rem; text-align:center;">
+        <div style="font-size:.56rem; font-weight:700; letter-spacing:.24em; color:{GD}; text-transform:uppercase;">Marken · UPS Healthcare</div>
+        <div style="font-size:.95rem; font-weight:700; color:{W}; margin-top:.15rem;">Solutions Pipeline</div>
+        <div style="font-size:.62rem; color:rgba(255,255,255,0.35); margin-top:.1rem;">Precision Logistics</div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.divider()
+    page = st.radio("", ["Dashboard", "Masterfile Manager"], label_visibility="collapsed")
+    st.divider()
+    st.markdown(f'<div style="font-size:.58rem; color:rgba(255,255,255,0.25); text-align:center; line-height:1.4;">Report generated<br>{datetime.now().strftime("%d %b %Y · %H:%M")}</div>', unsafe_allow_html=True)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# HEADER
+# ═══════════════════════════════════════════════════════════════════════════════
+st.markdown(f"""
+<div class="rh">
+    <div><div class="rh-b">Marken · UPS Healthcare Precision Logistics</div>
+        <div class="rh-t">Solutions Team — Global Pipeline Report</div>
+        <div class="rh-s">Opportunity overview · Masterfile management · Analytics</div></div>
+    <div class="rh-r"><div class="rh-d">{datetime.now().strftime('%d %B %Y')}</div><div class="rh-c">Confidential</div></div>
+</div>
+""", unsafe_allow_html=True)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# INITIAL UPLOAD
+# ═══════════════════════════════════════════════════════════════════════════════
+if st.session_state.master is None:
+    st.markdown("""<div class="wf"><b>Getting started</b> — Upload your Salesforce export or existing Masterfile (.xlsx / .csv). The app detects the format and adds team columns if needed.</div>""", unsafe_allow_html=True)
+    f = st.file_uploader("Upload Salesforce Export or Masterfile", type=["xlsx", "xls", "csv"], label_visibility="collapsed")
+    if f:
+        raw = pd.read_csv(f) if f.name.endswith(".csv") else pd.read_excel(f)
+        cl = clean_upload(raw)
+        for c in TEAM_COLS:
+            if c not in cl.columns:
+                cl[c] = ""
+        cols = [c for c in ALL_COLS if c in cl.columns]
+        st.session_state.master = cl[cols]
+        st.rerun()
+    st.stop()
+
+df = st.session_state.master.copy()
+df["Opportunity PAR"] = df["Opportunity PAR"].apply(parse_par)
+df["Stage Duration"] = pd.to_numeric(df.get("Stage Duration", 0), errors="coerce").fillna(0).astype(int)
+df["Close Date Parsed"] = pd.to_datetime(df["Close Date"], errors="coerce")
+if "Received by Solutions" in df.columns:
+    df["Received by Solutions Parsed"] = pd.to_datetime(df["Received by Solutions"], errors="coerce")
+if "Closed by Solutions" in df.columns:
+    df["Closed by Solutions Parsed"] = pd.to_datetime(df["Closed by Solutions"], errors="coerce")
+if "Status" not in df.columns:
+    df["Status"] = "Unassigned"
+else:
+    df["Status"] = df["Status"].fillna("Unassigned")
+if "Product" not in df.columns:
+    df["Product"] = "General"
+else:
+    df["Product"] = df["Product"].fillna("General")
+
+TODAY = pd.Timestamp.now().normalize()
+
+# Compute Solutions Cycle Time (days between Received and Closed)
+if "Received by Solutions Parsed" in df.columns and "Closed by Solutions Parsed" in df.columns:
+    df["Solutions Cycle Days"] = (df["Closed by Solutions Parsed"] - df["Received by Solutions Parsed"]).dt.days
+else:
+    df["Solutions Cycle Days"] = np.nan
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  DASHBOARD
+# ═══════════════════════════════════════════════════════════════════════════════
+if page == "Dashboard":
+
+    # ── Filters ──────────────────────────────────────────────────────────────
+    with st.expander("Filters", expanded=False):
+        f1, f2, f3, f4 = st.columns(4)
+        sel_st = f1.multiselect("Stage", sorted(df["Stage"].dropna().unique()), default=sorted(df["Stage"].dropna().unique()))
+        sel_sv = f2.multiselect("Service", sorted(df["Main Primary Service"].dropna().unique()), default=sorted(df["Main Primary Service"].dropna().unique()))
+        sel_rg = f3.multiselect("Region", sorted(df["Owner Role"].dropna().unique()), default=sorted(df["Owner Role"].dropna().unique()))
+        sel_rs = f4.multiselect("Solution Resource", sorted(df["Solution Resource"].dropna().unique()), default=sorted(df["Solution Resource"].dropna().unique()))
+
+        f5, f6, f7, _ = st.columns(4)
+        sel_status = f5.multiselect("Status", sorted(df["Status"].dropna().unique()), default=sorted(df["Status"].dropna().unique()))
+        sel_product = f6.multiselect("Product", sorted(df["Product"].dropna().unique()), default=sorted(df["Product"].dropna().unique()))
+
+    fdf = df[
+        df["Stage"].isin(sel_st)
+        & df["Main Primary Service"].isin(sel_sv)
+        & df["Owner Role"].isin(sel_rg)
+        & df["Solution Resource"].isin(sel_rs)
+        & df["Status"].isin(sel_status)
+        & df["Product"].isin(sel_product)
+    ]
+
+    total = fdf["Opportunity PAR"].sum()
+    n_opp = len(fdf)
+    n_cust = fdf["Account Name"].nunique()
+    n_svc = fdf["Main Primary Service"].nunique()
+    avg_deal = fdf["Opportunity PAR"].mean() if n_opp else 0
+    avg_dur = fdf["Stage Duration"].mean() if n_opp else 0
+    past_due = fdf[fdf["Close Date Parsed"] < TODAY]
+    aging_60 = fdf[fdf["Stage Duration"] > 60]
+
+    n_working = len(fdf[fdf["Status"] == "Working"])
+    n_pending = len(fdf[fdf["Status"] == "Pending"])
+    n_unassigned = len(fdf[fdf["Status"] == "Unassigned"])
+    n_products = fdf[fdf["Product"] != "General"]["Product"].nunique()
+
+    # ── KPIs ─────────────────────────────────────────────────────────────────
+    st.markdown(f"""
+    <div class="kr">
+        <div class="kp" style="--ac:{TL};"><div class="kp-l">Pipeline Value</div><div class="kp-v">{fc(total)}</div><div class="kp-d">{n_opp} opportunities</div></div>
+        <div class="kp" style="--ac:{NY};"><div class="kp-l">Customers</div><div class="kp-v">{n_cust}</div><div class="kp-d">Unique accounts</div></div>
+        <div class="kp" style="--ac:{GD};"><div class="kp-l">Products in Scope</div><div class="kp-v">{n_svc}</div><div class="kp-d">{n_products} tagged product(s)</div></div>
+        <div class="kp" style="--ac:{BA};"><div class="kp-l">Avg Deal Size</div><div class="kp-v">{fc(avg_deal)}</div><div class="kp-d">Per opportunity</div></div>
+        <div class="kp" style="--ac:{GN};"><div class="kp-l">Status: Working</div><div class="kp-v">{n_working}</div><div class="kp-d">{n_pending} pending · {n_unassigned} unassigned</div></div>
+        <div class="kp" style="--ac:{G400};"><div class="kp-l">Avg Stage Duration</div><div class="kp-v">{avg_dur:.0f}d</div><div class="kp-d">{len(aging_60)} over 60 days</div></div>
+        <div class="kp" style="--ac:{RD};"><div class="kp-l">Past Close Date</div><div class="kp-v">{len(past_due)}</div><div class="kp-d">{fc(past_due['Opportunity PAR'].sum())} at risk</div></div>
     </div>
     """, unsafe_allow_html=True)
 
 
-def render_kpis(df):
-    total_opps = len(df)
-    total_val = df["PAR_clean"].sum() if "PAR_clean" in df.columns else 0
-    avg_val = df["PAR_clean"].mean() if "PAR_clean" in df.columns else 0
-    median_val = df["PAR_clean"].median() if "PAR_clean" in df.columns else 0
-    unique_accts = df["Account Name"].nunique() if "Account Name" in df.columns else 0
-    avg_duration = df["Stage Duration"].mean() if "Stage Duration" in df.columns else 0
+    # ══════════════════════════════════════════════════════════════════════════
+    # 1 — PIPELINE OVERVIEW
+    # ══════════════════════════════════════════════════════════════════════════
+    st.markdown('<div class="sec">1 · Pipeline Overview</div>', unsafe_allow_html=True)
 
-    # Status counts
-    working = len(df[df.get("Status_display", pd.Series()) == "Working"]) if "Status_display" in df.columns else 0
-    pending = len(df[df.get("Status_display", pd.Series()) == "Pending"]) if "Status_display" in df.columns else 0
-    not_assigned = len(df[df.get("Status_display", pd.Series()) == "Not Assigned"]) if "Status_display" in df.columns else 0
+    p1a, p1b = st.columns([1.15, 0.85])
 
-    # Regions
-    emea = len(df[df["Owner Role"] == "EMEA BD"]) if "Owner Role" in df.columns else 0
-    noram = len(df[df["Owner Role"] == "NORAM BD"]) if "Owner Role" in df.columns else 0
-
-    c1, c2, c3, c4, c5 = st.columns(5)
-    with c1:
-        st.markdown(kpi_card("Total Pipeline Value", fmt_currency(total_val),
-                             f"Avg {fmt_currency(avg_val)} · Med {fmt_currency(median_val)}", accent=True), unsafe_allow_html=True)
-    with c2:
-        st.markdown(kpi_card("Opportunities", fmt_number(total_opps),
-                             f"EMEA {emea} · NORAM {noram}"), unsafe_allow_html=True)
-    with c3:
-        st.markdown(kpi_card("Unique Accounts", fmt_number(unique_accts),
-                             f"{total_opps/max(unique_accts,1):.1f} opps per account"), unsafe_allow_html=True)
-    with c4:
-        st.markdown(kpi_card("Avg Stage Duration", f"{avg_duration:.0f} days",
-                             f"Max {df['Stage Duration'].max():.0f}d" if "Stage Duration" in df.columns and not df["Stage Duration"].isna().all() else ""), unsafe_allow_html=True)
-    with c5:
-        st.markdown(kpi_card("Status Breakdown",
-                             f"{working}W · {pending}P",
-                             f"{not_assigned} not yet assigned"), unsafe_allow_html=True)
-
-
-def render_executive_summary(df):
-    section_header("Executive Summary", "High-level pipeline health and composition at a glance")
-
-    col1, col2 = st.columns([1.1, 1])
-
-    with col1:
-        # Pipeline by Region — donut
-        if "Owner Role" in df.columns and "PAR_clean" in df.columns:
-            region_data = df.groupby("Owner Role")["PAR_clean"].agg(["sum", "count"]).reset_index()
-            region_data.columns = ["Region", "Value", "Count"]
-
-            fig = go.Figure(data=[go.Pie(
-                labels=region_data["Region"],
-                values=region_data["Value"],
-                hole=0.55,
-                marker=dict(colors=[MARKEN["navy"], MARKEN["teal"]]),
-                textinfo="label+percent",
-                textfont=dict(size=12, color="white"),
-                hovertemplate="<b>%{label}</b><br>Value: $%{value:,.0f}<br>Share: %{percent}<extra></extra>",
-            )])
-            fig.update_layout(
-                title=dict(text="Pipeline Value by Region", font=dict(size=14, color=MARKEN["navy"])),
-                annotations=[dict(text=fmt_currency(region_data["Value"].sum()), x=0.5, y=0.5,
-                                  font_size=18, font_color=MARKEN["navy"], showarrow=False, font_family="Source Sans Pro")],
-                showlegend=False,
-            )
-            plotly_layout(fig, height=340, margin=dict(l=20, r=20, t=50, b=20))
-            st.plotly_chart(fig, use_container_width=True)
-
-    with col2:
-        # Status breakdown — horizontal bar
-        if "Status_display" in df.columns and "PAR_clean" in df.columns:
-            status_data = df.groupby("Status_display").agg(
-                Count=("Status_display", "size"),
-                Value=("PAR_clean", "sum")
-            ).reset_index().sort_values("Value", ascending=True)
-
-            color_map = {"Working": MARKEN["teal"], "Pending": MARKEN["gold"], "Not Assigned": MARKEN["gray_400"]}
-
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                y=status_data["Status_display"],
-                x=status_data["Value"],
-                orientation="h",
-                marker_color=[color_map.get(s, MARKEN["gray_400"]) for s in status_data["Status_display"]],
-                text=[f"{fmt_currency(v)}  ({c} opps)" for v, c in zip(status_data["Value"], status_data["Count"])],
-                textposition="auto",
-                textfont=dict(size=11, color="white"),
-                hovertemplate="<b>%{y}</b><br>Value: $%{x:,.0f}<extra></extra>",
-            ))
-            fig.update_layout(title=dict(text="Pipeline by Solutions Status", font=dict(size=14, color=MARKEN["navy"])))
-            plotly_layout(fig, height=340, margin=dict(l=100, r=20, t=50, b=30))
-            fig.update_xaxes(title="", tickformat="$,.0s")
-            fig.update_yaxes(title="")
-            st.plotly_chart(fig, use_container_width=True)
-
-    # Auto-generated narrative
-    top_service = df["Main Primary Service"].value_counts().idxmax() if "Main Primary Service" in df.columns else "N/A"
-    top_service_pct = df["Main Primary Service"].value_counts(normalize=True).iloc[0] * 100 if "Main Primary Service" in df.columns else 0
-    top_account = df.groupby("Account Name")["PAR_clean"].sum().idxmax() if "Account Name" in df.columns and "PAR_clean" in df.columns else "N/A"
-    top_account_val = df.groupby("Account Name")["PAR_clean"].sum().max() if "Account Name" in df.columns and "PAR_clean" in df.columns else 0
-
-    total_val = df["PAR_clean"].sum() if "PAR_clean" in df.columns else 0
-    insight(
-        f"The Solutions team currently manages <strong>{len(df)} opportunities</strong> across "
-        f"<strong>{df['Account Name'].nunique() if 'Account Name' in df.columns else 0} accounts</strong>, "
-        f"with a combined pipeline of <strong>{fmt_currency(total_val)}</strong>. "
-        f"<strong>{top_service}</strong> is the dominant service line, representing {top_service_pct:.0f}% of all opportunities. "
-        f"The largest account by pipeline value is <strong>{top_account}</strong> ({fmt_currency(top_account_val)})."
-    )
-
-
-def render_pipeline_analysis(df):
-    section_header("Pipeline Deep-Dive", "Service mix, value distribution, and timeline analysis")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        # Pipeline by Service — horizontal bars
-        if "Main Primary Service" in df.columns and "PAR_clean" in df.columns:
-            svc = df.groupby("Main Primary Service").agg(
-                Value=("PAR_clean", "sum"),
-                Count=("Main Primary Service", "size"),
-                Avg=("PAR_clean", "mean"),
-            ).reset_index().sort_values("Value", ascending=True)
-
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                y=svc["Main Primary Service"], x=svc["Value"],
-                orientation="h",
-                marker=dict(color=svc["Value"], colorscale=[[0, MARKEN["pale_teal"]], [1, MARKEN["navy"]]]),
-                text=[f"{fmt_currency(v)} ({c})" for v, c in zip(svc["Value"], svc["Count"])],
-                textposition="auto", textfont=dict(size=11, color="white"),
-                hovertemplate="<b>%{y}</b><br>Total: $%{x:,.0f}<extra></extra>",
-            ))
-            fig.update_layout(title=dict(text="Pipeline Value by Primary Service", font=dict(size=14, color=MARKEN["navy"])))
-            plotly_layout(fig, height=380, margin=dict(l=140, r=20, t=50, b=30))
-            fig.update_xaxes(title="", tickformat="$,.0s")
-            fig.update_yaxes(title="")
-            st.plotly_chart(fig, use_container_width=True)
-
-    with col2:
-        # Value distribution — histogram
-        if "PAR_clean" in df.columns:
-            fig = go.Figure()
-            fig.add_trace(go.Histogram(
-                x=df["PAR_clean"].dropna(),
-                nbinsx=12,
-                marker_color=MARKEN["teal"],
-                marker_line=dict(color=MARKEN["navy"], width=1),
-                hovertemplate="Range: $%{x:,.0f}<br>Count: %{y}<extra></extra>",
-            ))
-            fig.update_layout(title=dict(text="Opportunity Value Distribution", font=dict(size=14, color=MARKEN["navy"])))
-            plotly_layout(fig, height=380, margin=dict(l=50, r=20, t=50, b=40))
-            fig.update_xaxes(title="Opportunity PAR (USD)", tickformat="$,.0s")
-            fig.update_yaxes(title="Frequency")
-            st.plotly_chart(fig, use_container_width=True)
-
-    # Second row
-    col3, col4 = st.columns(2)
-
-    with col3:
-        # Close Date timeline
-        if "Close Date_dt" in df.columns and "PAR_clean" in df.columns:
-            timeline = df.dropna(subset=["Close Date_dt"]).copy()
-            if len(timeline) > 0:
-                timeline["Month"] = timeline["Close Date_dt"].dt.to_period("M").astype(str)
-                monthly = timeline.groupby("Month").agg(
-                    Value=("PAR_clean", "sum"),
-                    Count=("Month", "size"),
-                ).reset_index().sort_values("Month")
-
-                fig = go.Figure()
-                fig.add_trace(go.Bar(
-                    x=monthly["Month"], y=monthly["Value"],
-                    marker_color=MARKEN["teal"],
-                    text=[fmt_currency(v) for v in monthly["Value"]],
-                    textposition="outside", textfont=dict(size=10, color=MARKEN["navy"]),
-                    hovertemplate="<b>%{x}</b><br>Value: $%{y:,.0f}<extra></extra>",
-                    name="Value",
-                ))
-                fig.add_trace(go.Scatter(
-                    x=monthly["Month"], y=monthly["Count"],
-                    mode="lines+markers+text",
-                    yaxis="y2",
-                    line=dict(color=MARKEN["gold"], width=2.5),
-                    marker=dict(size=8, color=MARKEN["gold"]),
-                    text=monthly["Count"].astype(str),
-                    textposition="top center", textfont=dict(size=10, color=MARKEN["gold"]),
-                    hovertemplate="<b>%{x}</b><br>Count: %{y}<extra></extra>",
-                    name="# Opps",
-                ))
-                fig.update_layout(
-                    title=dict(text="Expected Close Timeline", font=dict(size=14, color=MARKEN["navy"])),
-                    yaxis2=dict(overlaying="y", side="right", showgrid=False,
-                                tickfont=dict(color=MARKEN["gold"], size=11)),
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02),
-                )
-                plotly_layout(fig, height=380, margin=dict(l=50, r=50, t=60, b=40))
-                fig.update_xaxes(title="")
-                fig.update_yaxes(title="Value (USD)", tickformat="$,.0s")
-                st.plotly_chart(fig, use_container_width=True)
-
-    with col4:
-        # Stage Duration scatter
-        if "Stage Duration" in df.columns and "PAR_clean" in df.columns:
-            scatter_df = df.dropna(subset=["Stage Duration", "PAR_clean"]).copy()
-            if len(scatter_df) > 0:
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(
-                    x=scatter_df["Stage Duration"],
-                    y=scatter_df["PAR_clean"],
-                    mode="markers",
-                    marker=dict(
-                        size=10,
-                        color=scatter_df["Stage Duration"],
-                        colorscale=[[0, MARKEN["teal"]], [0.5, MARKEN["gold"]], [1, MARKEN["red"]]],
-                        line=dict(width=1, color="white"),
-                        opacity=0.85,
-                    ),
-                    text=scatter_df["Account Name"] if "Account Name" in scatter_df.columns else None,
-                    hovertemplate="<b>%{text}</b><br>Duration: %{x} days<br>Value: $%{y:,.0f}<extra></extra>",
-                ))
-                # Add median lines
-                med_dur = scatter_df["Stage Duration"].median()
-                med_val = scatter_df["PAR_clean"].median()
-                fig.add_hline(y=med_val, line_dash="dot", line_color=MARKEN["gray_400"], opacity=0.5,
-                              annotation_text=f"Median Value: {fmt_currency(med_val)}", annotation_font_size=10)
-                fig.add_vline(x=med_dur, line_dash="dot", line_color=MARKEN["gray_400"], opacity=0.5,
-                              annotation_text=f"Median: {med_dur:.0f}d", annotation_font_size=10)
-
-                fig.update_layout(title=dict(text="Value vs. Stage Duration", font=dict(size=14, color=MARKEN["navy"])))
-                plotly_layout(fig, height=380, margin=dict(l=60, r=20, t=50, b=50))
-                fig.update_xaxes(title="Days in Stage")
-                fig.update_yaxes(title="Opportunity PAR (USD)", tickformat="$,.0s")
-                st.plotly_chart(fig, use_container_width=True)
-
-
-def render_solutions_status(df):
-    """New section for Status, Received/Closed by Solutions, Product columns."""
-    section_header("Solutions Workflow Tracker", "Status progression, cycle time, and product classification")
-
-    col1, col2, col3 = st.columns(3)
-
-    # KPI mini-cards for Solutions-specific metrics
-    if "Status_display" in df.columns:
-        working = len(df[df["Status_display"] == "Working"])
-        pending = len(df[df["Status_display"] == "Pending"])
-        not_assigned = len(df[df["Status_display"] == "Not Assigned"])
-    else:
-        working = pending = not_assigned = 0
-
-    received_count = df["Received by Solutions_dt"].notna().sum() if "Received by Solutions_dt" in df.columns else 0
-    closed_count = df["Closed by Solutions_dt"].notna().sum() if "Closed by Solutions_dt" in df.columns else 0
-    product_count = df["Product"].notna().sum() if "Product" in df.columns else 0
-
-    with col1:
-        st.markdown(kpi_card("Assigned to Solutions", str(working + pending),
-                             f"Working: {working} · Pending: {pending}", accent=True), unsafe_allow_html=True)
-    with col2:
-        st.markdown(kpi_card("Received / Closed", f"{received_count} / {closed_count}",
-                             f"{not_assigned} awaiting assignment"), unsafe_allow_html=True)
-    with col3:
-        st.markdown(kpi_card("Product Classified", str(product_count),
-                             f"{len(df) - product_count} unclassified"), unsafe_allow_html=True)
-
-    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
-
-    col_a, col_b = st.columns(2)
-
-    with col_a:
-        # Status donut
-        if "Status_display" in df.columns and "PAR_clean" in df.columns:
-            status_agg = df.groupby("Status_display").agg(
-                Value=("PAR_clean", "sum"), Count=("Status_display", "size")
-            ).reset_index()
-            color_map = {"Working": MARKEN["teal"], "Pending": MARKEN["gold"], "Not Assigned": MARKEN["gray_400"]}
-
-            fig = go.Figure(data=[go.Pie(
-                labels=status_agg["Status_display"],
-                values=status_agg["Count"],
-                hole=0.5,
-                marker=dict(colors=[color_map.get(s, MARKEN["gray_400"]) for s in status_agg["Status_display"]]),
-                textinfo="label+value",
-                textfont=dict(size=12),
-                hovertemplate="<b>%{label}</b><br>Opportunities: %{value}<br>Pipeline: $%{customdata:,.0f}<extra></extra>",
-                customdata=status_agg["Value"],
-            )])
-            fig.update_layout(title=dict(text="Opportunities by Solutions Status", font=dict(size=14, color=MARKEN["navy"])))
-            plotly_layout(fig, height=340, margin=dict(l=20, r=20, t=50, b=20))
-            st.plotly_chart(fig, use_container_width=True)
-
-    with col_b:
-        # Product breakdown
-        if "Product_display" in df.columns and "PAR_clean" in df.columns:
-            prod_agg = df.groupby("Product_display").agg(
-                Value=("PAR_clean", "sum"), Count=("Product_display", "size")
-            ).reset_index().sort_values("Value", ascending=True)
-
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                y=prod_agg["Product_display"], x=prod_agg["Value"],
-                orientation="h",
-                marker_color=[MARKEN["navy"] if p != "Not Specified" else MARKEN["gray_400"] for p in prod_agg["Product_display"]],
-                text=[f"{fmt_currency(v)} ({c})" for v, c in zip(prod_agg["Value"], prod_agg["Count"])],
-                textposition="auto", textfont=dict(size=11, color="white"),
-                hovertemplate="<b>%{y}</b><br>Value: $%{x:,.0f}<extra></extra>",
-            ))
-            fig.update_layout(title=dict(text="Pipeline Value by Product", font=dict(size=14, color=MARKEN["navy"])))
-            plotly_layout(fig, height=340, margin=dict(l=120, r=20, t=50, b=30))
-            fig.update_xaxes(title="", tickformat="$,.0s")
-            fig.update_yaxes(title="")
-            st.plotly_chart(fig, use_container_width=True)
-
-    # Solutions intake timeline
-    if "Received by Solutions_dt" in df.columns:
-        received_df = df.dropna(subset=["Received by Solutions_dt"]).copy()
-        if len(received_df) > 0:
-            received_df["Received_Week"] = received_df["Received by Solutions_dt"].dt.to_period("W").astype(str)
-            weekly = received_df.groupby("Received_Week").size().reset_index(name="Count").sort_values("Received_Week")
-
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                x=weekly["Received_Week"], y=weekly["Count"],
-                marker_color=MARKEN["teal"],
-                text=weekly["Count"].astype(str),
-                textposition="outside", textfont=dict(size=11, color=MARKEN["navy"]),
-                hovertemplate="<b>%{x}</b><br>Received: %{y}<extra></extra>",
-            ))
-            fig.update_layout(title=dict(text="Opportunities Received by Solutions (by Week)", font=dict(size=14, color=MARKEN["navy"])))
-            plotly_layout(fig, height=300, margin=dict(l=40, r=20, t=50, b=60))
-            fig.update_xaxes(title="", tickangle=-45)
-            fig.update_yaxes(title="# Opportunities")
-            st.plotly_chart(fig, use_container_width=True)
-
-    # Detailed status table
-    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-    status_cols = ["Account Name", "Opportunity Name", "Status_display", "Product_display",
-                   "Received by Solutions", "Closed by Solutions", "PAR_clean", "Solution Resource"]
-    avail_cols = [c for c in status_cols if c in df.columns]
-
-    if avail_cols:
-        display_df = df[avail_cols].copy()
-        display_df = display_df.rename(columns={
-            "Status_display": "Status",
-            "Product_display": "Product",
-            "PAR_clean": "Value (USD)",
-        })
-        st.dataframe(display_df, use_container_width=True, height=280,
-                     column_config={
-                         "Value (USD)": st.column_config.NumberColumn(format="$%,.0f"),
-                     })
-
-
-def render_customer_analysis(df):
-    section_header("Customer Intelligence", "Account concentration, top accounts, and customer-service mapping")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        # Top accounts bar
-        if "Account Name" in df.columns and "PAR_clean" in df.columns:
-            top = df.groupby("Account Name")["PAR_clean"].sum().reset_index()
-            top.columns = ["Account", "Value"]
-            top = top.sort_values("Value", ascending=True).tail(10)
-
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                y=top["Account"], x=top["Value"],
-                orientation="h",
-                marker=dict(color=top["Value"],
-                            colorscale=[[0, MARKEN["pale_teal"]], [0.5, MARKEN["teal"]], [1, MARKEN["navy"]]]),
-                text=[fmt_currency(v) for v in top["Value"]],
-                textposition="auto", textfont=dict(size=11, color="white"),
-                hovertemplate="<b>%{y}</b><br>Pipeline: $%{x:,.0f}<extra></extra>",
-            ))
-            fig.update_layout(title=dict(text="Top 10 Accounts by Pipeline Value", font=dict(size=14, color=MARKEN["navy"])))
-            plotly_layout(fig, height=420, margin=dict(l=180, r=20, t=50, b=30))
-            fig.update_xaxes(title="", tickformat="$,.0s")
-            fig.update_yaxes(title="")
-            st.plotly_chart(fig, use_container_width=True)
-
-    with col2:
-        # Customer concentration — Pareto
-        if "Account Name" in df.columns and "PAR_clean" in df.columns:
-            conc = df.groupby("Account Name")["PAR_clean"].sum().reset_index()
-            conc.columns = ["Account", "Value"]
-            conc = conc.sort_values("Value", ascending=False).reset_index(drop=True)
-            conc["Cumulative"] = conc["Value"].cumsum()
-            conc["Cum_Pct"] = conc["Cumulative"] / conc["Value"].sum() * 100
-            conc["Rank"] = range(1, len(conc) + 1)
-
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                x=conc["Rank"], y=conc["Value"],
-                marker_color=MARKEN["teal"], name="Account Value",
-                hovertemplate="<b>#%{x}: %{customdata}</b><br>$%{y:,.0f}<extra></extra>",
-                customdata=conc["Account"],
-            ))
-            fig.add_trace(go.Scatter(
-                x=conc["Rank"], y=conc["Cum_Pct"],
-                mode="lines+markers", yaxis="y2",
-                line=dict(color=MARKEN["navy"], width=2.5),
-                marker=dict(size=6, color=MARKEN["navy"]),
-                name="Cumulative %",
-                hovertemplate="Top %{x} accounts = %{y:.0f}%<extra></extra>",
-            ))
-            fig.add_hline(y=80, yref="y2", line_dash="dot", line_color=MARKEN["gold"], opacity=0.7,
-                          annotation_text="80% threshold", annotation_font_size=10, annotation_font_color=MARKEN["gold"])
-            fig.update_layout(
-                title=dict(text="Customer Concentration (Pareto)", font=dict(size=14, color=MARKEN["navy"])),
-                yaxis2=dict(overlaying="y", side="right", range=[0, 105], showgrid=False,
-                            ticksuffix="%", tickfont=dict(color=MARKEN["navy"])),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02),
-            )
-            plotly_layout(fig, height=420, margin=dict(l=60, r=60, t=60, b=40))
-            fig.update_xaxes(title="Account Rank")
-            fig.update_yaxes(title="Value (USD)", tickformat="$,.0s")
-            st.plotly_chart(fig, use_container_width=True)
-
-    # Customer-Service heatmap
-    if "Account Name" in df.columns and "Main Primary Service" in df.columns and "PAR_clean" in df.columns:
-        top_accts = df.groupby("Account Name")["PAR_clean"].sum().nlargest(10).index.tolist()
-        heat_df = df[df["Account Name"].isin(top_accts)].copy()
-        pivot = heat_df.pivot_table(values="PAR_clean", index="Account Name",
-                                    columns="Main Primary Service", aggfunc="sum", fill_value=0)
-
-        fig = go.Figure(data=go.Heatmap(
-            z=pivot.values,
-            x=pivot.columns.tolist(),
-            y=pivot.index.tolist(),
-            colorscale=[[0, "#F0F4F8"], [0.3, MARKEN["pale_teal"]], [0.7, MARKEN["teal"]], [1, MARKEN["navy"]]],
-            text=[[fmt_currency(v) if v > 0 else "" for v in row] for row in pivot.values],
-            texttemplate="%{text}",
-            textfont=dict(size=10),
-            hovertemplate="<b>%{y}</b><br>Service: %{x}<br>Value: $%{z:,.0f}<extra></extra>",
-            showscale=False,
+    with p1a:
+        st.markdown('<p class="so">Solutions Design holds the bulk of the pipeline — most value is still in early stages</p>', unsafe_allow_html=True)
+        sg = fdf.groupby("Stage").agg(Value=("Opportunity PAR", "sum"), Count=("Opportunity Name", "count")).reset_index()
+        sg["StageOrd"] = sg["Stage"].apply(lambda x: STAGE_ORDER.index(x) if x in STAGE_ORDER else 99)
+        sg = sg.sort_values("StageOrd")
+        colors = []
+        for s in sg["Stage"]:
+            if "Closed/Lost" in s: colors.append(RD)
+            elif "Closed/Won" in s: colors.append(GN)
+            elif "Negotiation" in s: colors.append(GD)
+            elif "Proposal" in s: colors.append(BA)
+            elif "Design" in s: colors.append(TL)
+            else: colors.append(G400)
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            x=sg["Stage"], y=sg["Value"], marker_color=colors,
+            text=[f"{fc(v)}<br><span style='font-size:9px;color:{G600}'>{c} opps</span>" for v, c in zip(sg["Value"], sg["Count"])],
+            textposition="outside", textfont=dict(size=10),
         ))
-        fig.update_layout(title=dict(text="Top 10 Accounts × Service Matrix", font=dict(size=14, color=MARKEN["navy"])))
-        plotly_layout(fig, height=380, margin=dict(l=180, r=20, t=50, b=80))
-        fig.update_xaxes(tickangle=-30)
+        pl(fig, h=320, mb=10)
+        fig.update_layout(showlegend=False, yaxis=dict(visible=False))
+        fig.update_xaxes(showgrid=False, tickfont=dict(size=9.5))
+        fig.update_yaxes(showgrid=False, showline=False)
         st.plotly_chart(fig, use_container_width=True)
 
-    # Concentration insight
-    if "Account Name" in df.columns and "PAR_clean" in df.columns:
-        total = df["PAR_clean"].sum()
-        top3 = df.groupby("Account Name")["PAR_clean"].sum().nlargest(3)
-        top3_pct = top3.sum() / total * 100 if total > 0 else 0
-        top3_names = ", ".join(top3.index.tolist())
-        insight(f"<strong>Concentration risk:</strong> The top 3 accounts ({top3_names}) represent "
-                f"<strong>{top3_pct:.0f}%</strong> of total pipeline value. "
-                f"{'Consider diversification strategies.' if top3_pct > 50 else 'Pipeline is well-diversified across accounts.'}")
+    with p1b:
+        st.markdown('<p class="so">Pipeline stage composition — value vs. count</p>', unsafe_allow_html=True)
+        sg2 = sg.copy()
+        sg2["Val%"] = sg2["Value"] / sg2["Value"].sum() * 100
+        sg2["Cnt%"] = sg2["Count"] / sg2["Count"].sum() * 100
+        fig2 = make_subplots(rows=1, cols=2, specs=[[{"type": "pie"}, {"type": "pie"}]], subplot_titles=["By Value", "By Count"])
+        fig2.add_trace(go.Pie(labels=sg2["Stage"], values=sg2["Value"], hole=.5,
+            marker=dict(colors=colors), textinfo="percent", textfont=dict(size=10),
+            hovertemplate="<b>%{label}</b><br>$%{value:,.0f}<extra></extra>", sort=False), 1, 1)
+        fig2.add_trace(go.Pie(labels=sg2["Stage"], values=sg2["Count"], hole=.5,
+            marker=dict(colors=colors), textinfo="percent", textfont=dict(size=10),
+            hovertemplate="<b>%{label}</b><br>%{value} opps<extra></extra>", sort=False), 1, 2)
+        pl(fig2, h=320)
+        fig2.update_layout(showlegend=False)
+        fig2.update_annotations(font=dict(size=10, color=G600))
+        st.plotly_chart(fig2, use_container_width=True)
 
 
-def render_team_analysis(df):
-    section_header("Team Performance", "Solution resource allocation, opportunity distribution, and workload balance")
+    # ══════════════════════════════════════════════════════════════════════════
+    # 2 — STATUS & SOLUTIONS VELOCITY (NEW)
+    # ══════════════════════════════════════════════════════════════════════════
+    st.markdown('<div class="sec">2 · Solutions Status & Velocity</div>', unsafe_allow_html=True)
 
-    col1, col2 = st.columns(2)
+    s2a, s2b, s2c = st.columns([0.35, 0.35, 0.30])
 
-    with col1:
-        # Solution Resource — bar chart with value + count
-        if "Solution Resource" in df.columns and "PAR_clean" in df.columns:
-            team = df.groupby("Solution Resource").agg(
-                Value=("PAR_clean", "sum"),
-                Count=("Solution Resource", "size"),
-                Avg_Duration=("Stage Duration", "mean"),
-            ).reset_index().sort_values("Value", ascending=True)
+    with s2a:
+        st.markdown('<p class="so">Opportunity status distribution — workload snapshot</p>', unsafe_allow_html=True)
+        stat_g = fdf.groupby("Status").agg(
+            Value=("Opportunity PAR", "sum"), Count=("Opportunity Name", "count")
+        ).reset_index().sort_values("Count", ascending=False)
+        stat_colors = [STATUS_COLORS.get(s, G400) for s in stat_g["Status"]]
+        fig_stat = go.Figure(go.Bar(
+            x=stat_g["Status"], y=stat_g["Count"],
+            marker_color=stat_colors,
+            text=[f"{c}<br><span style='font-size:9px;color:{G600}'>{fc(v)}</span>" for c, v in zip(stat_g["Count"], stat_g["Value"])],
+            textposition="outside", textfont=dict(size=11),
+        ))
+        pl(fig_stat, h=300, mb=10)
+        fig_stat.update_layout(showlegend=False, yaxis=dict(visible=False))
+        fig_stat.update_xaxes(showgrid=False, tickfont=dict(size=10))
+        fig_stat.update_yaxes(showgrid=False, showline=False)
+        st.plotly_chart(fig_stat, use_container_width=True)
 
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                y=team["Solution Resource"], x=team["Value"],
-                orientation="h",
-                marker_color=MARKEN["navy"],
-                text=[f"{fmt_currency(v)} ({c} opps)" for v, c in zip(team["Value"], team["Count"])],
-                textposition="auto", textfont=dict(size=11, color="white"),
-                hovertemplate="<b>%{y}</b><br>Total: $%{x:,.0f}<extra></extra>",
+    with s2b:
+        st.markdown('<p class="so">Status × pipeline value — where the money sits</p>', unsafe_allow_html=True)
+        fig_stat2 = go.Figure(go.Pie(
+            labels=stat_g["Status"], values=stat_g["Value"], hole=.55,
+            marker=dict(colors=stat_colors),
+            textinfo="label+percent", textfont=dict(size=10),
+            hovertemplate="<b>%{label}</b><br>$%{value:,.0f}<br>%{percent}<extra></extra>",
+        ))
+        pl(fig_stat2, h=300)
+        fig_stat2.update_layout(showlegend=False)
+        st.plotly_chart(fig_stat2, use_container_width=True)
+
+    with s2c:
+        st.markdown('<p class="so">Solutions intake timeline</p>', unsafe_allow_html=True)
+        if "Received by Solutions Parsed" in fdf.columns:
+            rcv = fdf.dropna(subset=["Received by Solutions Parsed"]).copy()
+            if len(rcv):
+                rcv["Rcv Week"] = rcv["Received by Solutions Parsed"].dt.to_period("W").dt.to_timestamp()
+                wk = rcv.groupby("Rcv Week").agg(Count=("Opportunity Name", "count"), Value=("Opportunity PAR", "sum")).reset_index()
+                fig_rcv = go.Figure()
+                fig_rcv.add_trace(go.Bar(x=wk["Rcv Week"], y=wk["Count"], marker_color=TL, name="Received",
+                    text=wk["Count"], textposition="outside", textfont=dict(size=10)))
+                pl(fig_rcv, h=300, mb=10)
+                fig_rcv.update_layout(showlegend=False, yaxis=dict(visible=False),
+                    xaxis=dict(tickformat="%d %b", tickfont=dict(size=9)))
+                fig_rcv.update_xaxes(showgrid=False)
+                fig_rcv.update_yaxes(showgrid=False, showline=False)
+                st.plotly_chart(fig_rcv, use_container_width=True)
+            else:
+                st.info("No 'Received by Solutions' dates populated yet.")
+        else:
+            st.info("'Received by Solutions' column not found.")
+
+    # Solutions Resource × Status heatmap
+    st.markdown('<p class="so">Solution Resource workload by status — identify bottlenecks</p>', unsafe_allow_html=True)
+    rs_stat = pd.crosstab(fdf["Solution Resource"], fdf["Status"], values=fdf["Opportunity Name"], aggfunc="count").fillna(0).astype(int)
+    # Reorder columns
+    status_order = ["Working", "Pending", "Unassigned"]
+    rs_stat = rs_stat[[c for c in status_order if c in rs_stat.columns] + [c for c in rs_stat.columns if c not in status_order]]
+    fig_rs = go.Figure(go.Heatmap(
+        z=rs_stat.values, x=rs_stat.columns.tolist(), y=rs_stat.index.tolist(),
+        colorscale=[[0, W], [.3, TLL], [.7, TL], [1, NY]],
+        text=rs_stat.values, texttemplate="%{text}", textfont=dict(size=12),
+        hovertemplate="Resource: %{y}<br>Status: %{x}<br>Count: %{z}<extra></extra>",
+        showscale=False,
+    ))
+    pl(fig_rs, h=max(180, 34 * len(rs_stat)))
+    fig_rs.update_layout(xaxis=dict(tickfont=dict(size=10), side="top"), yaxis=dict(tickfont=dict(size=10), autorange="reversed"))
+    fig_rs.update_xaxes(showgrid=False, showline=False)
+    fig_rs.update_yaxes(showgrid=False, showline=False)
+    st.plotly_chart(fig_rs, use_container_width=True)
+
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 3 — PRODUCT ANALYSIS (NEW)
+    # ══════════════════════════════════════════════════════════════════════════
+    st.markdown('<div class="sec">3 · Product Segmentation</div>', unsafe_allow_html=True)
+
+    p3a, p3b = st.columns([0.50, 0.50])
+
+    with p3a:
+        prod_g = fdf.groupby("Product").agg(
+            Value=("Opportunity PAR", "sum"), Count=("Opportunity Name", "count"),
+            Avg=("Opportunity PAR", "mean")
+        ).reset_index().sort_values("Value", ascending=False)
+        top_prod = prod_g.iloc[0]["Product"] if len(prod_g) else "N/A"
+        top_prod_pct = prod_g.iloc[0]["Value"] / prod_g["Value"].sum() * 100 if len(prod_g) and prod_g["Value"].sum() > 0 else 0
+        st.markdown(f'<p class="so">{top_prod} represents {top_prod_pct:.0f}% of pipeline by value — product tagging is critical for forecasting</p>', unsafe_allow_html=True)
+
+        prod_colors = [SEQ[i % len(SEQ)] for i in range(len(prod_g))]
+        fig_prod = go.Figure()
+        fig_prod.add_trace(go.Bar(
+            x=prod_g["Product"], y=prod_g["Value"],
+            marker_color=prod_colors,
+            text=[f"{fc(v)}<br><span style='font-size:9px;color:{G600}'>{c} opps</span>" for v, c in zip(prod_g["Value"], prod_g["Count"])],
+            textposition="outside", textfont=dict(size=10),
+        ))
+        pl(fig_prod, h=300, mb=10)
+        fig_prod.update_layout(showlegend=False, yaxis=dict(visible=False))
+        fig_prod.update_xaxes(showgrid=False, tickfont=dict(size=10))
+        fig_prod.update_yaxes(showgrid=False, showline=False)
+        st.plotly_chart(fig_prod, use_container_width=True)
+
+    with p3b:
+        st.markdown('<p class="so">Product × Region — strategic coverage map</p>', unsafe_allow_html=True)
+        pr_ht = pd.crosstab(fdf["Product"], fdf["Owner Role"], values=fdf["Opportunity PAR"], aggfunc="sum").fillna(0)
+        fig_pr = go.Figure(go.Heatmap(
+            z=pr_ht.values, x=pr_ht.columns.tolist(), y=pr_ht.index.tolist(),
+            colorscale=[[0, W], [.3, TLL], [.7, TL], [1, NY]],
+            text=[[fc(v) for v in row] for row in pr_ht.values], texttemplate="%{text}", textfont=dict(size=11),
+            hovertemplate="Product: %{y}<br>Region: %{x}<br>Value: $%{z:,.0f}<extra></extra>",
+            showscale=False,
+        ))
+        pl(fig_pr, h=max(200, 50 * len(pr_ht)))
+        fig_pr.update_layout(xaxis=dict(tickfont=dict(size=10), side="top"), yaxis=dict(tickfont=dict(size=10), autorange="reversed"))
+        fig_pr.update_xaxes(showgrid=False, showline=False)
+        fig_pr.update_yaxes(showgrid=False, showline=False)
+        st.plotly_chart(fig_pr, use_container_width=True)
+
+    # Product × Service detail table
+    st.markdown('<p class="so">Product × Service cross-reference</p>', unsafe_allow_html=True)
+    ps_ht = pd.crosstab(fdf["Product"], fdf["Main Primary Service"], values=fdf["Opportunity PAR"], aggfunc="sum").fillna(0)
+    fig_ps = go.Figure(go.Heatmap(
+        z=ps_ht.values, x=ps_ht.columns.tolist(), y=ps_ht.index.tolist(),
+        colorscale=[[0, W], [.3, "#FFF8E1"], [.7, GD], [1, NY]],
+        text=[[fc(v) for v in row] for row in ps_ht.values], texttemplate="%{text}", textfont=dict(size=10),
+        hovertemplate="Product: %{y}<br>Service: %{x}<br>Value: $%{z:,.0f}<extra></extra>",
+        showscale=False,
+    ))
+    pl(fig_ps, h=max(180, 50 * len(ps_ht)))
+    fig_ps.update_layout(xaxis=dict(tickfont=dict(size=9.5), side="top"), yaxis=dict(tickfont=dict(size=10), autorange="reversed"))
+    fig_ps.update_xaxes(showgrid=False, showline=False)
+    fig_ps.update_yaxes(showgrid=False, showline=False)
+    st.plotly_chart(fig_ps, use_container_width=True)
+
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 4 — CUSTOMER ANALYSIS
+    # ══════════════════════════════════════════════════════════════════════════
+    st.markdown('<div class="sec">4 · Customer Concentration</div>', unsafe_allow_html=True)
+
+    c2a, c2b = st.columns([1.15, 0.85])
+
+    with c2a:
+        cu = fdf.groupby("Account Name").agg(Value=("Opportunity PAR", "sum"), Count=("Opportunity Name", "count")).reset_index().sort_values("Value", ascending=False)
+        top5_pct = cu.head(5)["Value"].sum() / cu["Value"].sum() * 100 if cu["Value"].sum() > 0 else 0
+        st.markdown(f'<p class="so">Top 5 accounts represent {top5_pct:.0f}% of total pipeline — high concentration risk</p>', unsafe_allow_html=True)
+        cu_top = cu.head(10).sort_values("Value", ascending=True)
+        fig3 = go.Figure(go.Bar(
+            y=cu_top["Account Name"], x=cu_top["Value"], orientation="h",
+            marker=dict(color=cu_top["Value"], colorscale=[[0, "#B2DFDB"], [.5, TL], [1, NY]], showscale=False),
+            text=[f"  {fc(v)}  ({c})" for v, c in zip(cu_top["Value"], cu_top["Count"])],
+            textposition="outside", textfont=dict(size=10, color=G800),
+        ))
+        pl(fig3, h=max(280, 34 * len(cu_top)))
+        fig3.update_layout(showlegend=False, xaxis=dict(visible=False), yaxis=dict(tickfont=dict(size=9.5)))
+        fig3.update_xaxes(showgrid=False, showline=False)
+        fig3.update_yaxes(showgrid=False, showline=False)
+        st.plotly_chart(fig3, use_container_width=True)
+
+    with c2b:
+        st.markdown('<p class="so">Cumulative concentration (Pareto curve)</p>', unsafe_allow_html=True)
+        cu_sorted = cu.sort_values("Value", ascending=False).reset_index(drop=True)
+        cu_sorted["CumVal"] = cu_sorted["Value"].cumsum()
+        cu_sorted["CumPct"] = cu_sorted["CumVal"] / cu_sorted["Value"].sum() * 100
+        cu_sorted["Rank"] = range(1, len(cu_sorted) + 1)
+        fig4 = go.Figure()
+        fig4.add_trace(go.Bar(x=cu_sorted["Rank"], y=cu_sorted["Value"], marker_color=TL, name="Individual Value",
+            hovertemplate="<b>%{customdata}</b><br>$%{y:,.0f}<extra></extra>", customdata=cu_sorted["Account Name"]))
+        fig4.add_trace(go.Scatter(x=cu_sorted["Rank"], y=cu_sorted["CumPct"], mode="lines+markers",
+            line=dict(color=NY, width=2.5), marker=dict(size=5, color=NY), name="Cumulative %", yaxis="y2"))
+        fig4.add_hline(y=80, line_dash="dot", line_color=RD, opacity=0.5, annotation_text="80%",
+            annotation_position="right", yref="y2")
+        pl(fig4, h=max(280, 34 * len(cu_top)), mb=40)
+        fig4.update_layout(
+            yaxis=dict(title="Value ($)", titlefont=dict(size=9), visible=False),
+            yaxis2=dict(title="Cumulative %", titlefont=dict(size=9), side="right", overlaying="y", range=[0, 105], showgrid=False),
+            xaxis=dict(title="Customer Rank", titlefont=dict(size=9), tickfont=dict(size=9)),
+            legend=dict(font=dict(size=8)),
+        )
+        fig4.update_xaxes(showgrid=False)
+        fig4.update_yaxes(showgrid=False, showline=False)
+        st.plotly_chart(fig4, use_container_width=True)
+
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 5 — PRODUCT / SERVICE MIX
+    # ══════════════════════════════════════════════════════════════════════════
+    st.markdown('<div class="sec">5 · Product / Service Mix</div>', unsafe_allow_html=True)
+
+    s3a, s3b = st.columns([0.55, 0.45])
+
+    with s3a:
+        sv = fdf.groupby("Main Primary Service").agg(Value=("Opportunity PAR", "sum"), Count=("Opportunity Name", "count"),
+            Avg=("Opportunity PAR", "mean")).reset_index().sort_values("Value", ascending=False)
+        top_svc = sv.iloc[0]["Main Primary Service"] if len(sv) else "N/A"
+        top_svc_pct = sv.iloc[0]["Value"] / sv["Value"].sum() * 100 if len(sv) and sv["Value"].sum() > 0 else 0
+        st.markdown(f'<p class="so">{top_svc} accounts for {top_svc_pct:.0f}% of pipeline value by service</p>', unsafe_allow_html=True)
+        fig5 = go.Figure(go.Pie(
+            labels=sv["Main Primary Service"], values=sv["Value"], hole=.5,
+            marker=dict(colors=SEQ[:len(sv)]),
+            textinfo="label+percent", textfont=dict(size=10),
+            hovertemplate="<b>%{label}</b><br>$%{value:,.0f}<br>%{percent}<extra></extra>", sort=True,
+        ))
+        pl(fig5, h=310)
+        fig5.update_layout(showlegend=False)
+        st.plotly_chart(fig5, use_container_width=True)
+
+    with s3b:
+        st.markdown('<p class="so">Average deal size varies significantly across service types</p>', unsafe_allow_html=True)
+        sv_s = sv.sort_values("Avg", ascending=True)
+        fig6 = go.Figure(go.Bar(
+            y=sv_s["Main Primary Service"], x=sv_s["Avg"], orientation="h", marker_color=NY,
+            text=[f"  {fc(v)}  ({c} opps)" for v, c in zip(sv_s["Avg"], sv_s["Count"])],
+            textposition="outside", textfont=dict(size=9.5, color=G800),
+        ))
+        pl(fig6, h=310)
+        fig6.update_layout(showlegend=False, xaxis=dict(visible=False), yaxis=dict(tickfont=dict(size=9.5)))
+        fig6.update_xaxes(showgrid=False, showline=False)
+        fig6.update_yaxes(showgrid=False, showline=False)
+        st.plotly_chart(fig6, use_container_width=True)
+
+    # Service × Region Heatmap
+    st.markdown('<p class="so">Service demand mapped by region</p>', unsafe_allow_html=True)
+    ht = pd.crosstab(fdf["Main Primary Service"], fdf["Owner Role"], values=fdf["Opportunity PAR"], aggfunc="sum").fillna(0)
+    fig7 = go.Figure(go.Heatmap(
+        z=ht.values, x=ht.columns.tolist(), y=ht.index.tolist(),
+        colorscale=[[0, W], [.3, TLL], [.7, TL], [1, NY]],
+        text=[[fc(v) for v in row] for row in ht.values], texttemplate="%{text}", textfont=dict(size=10),
+        hovertemplate="Service: %{y}<br>Region: %{x}<br>Value: $%{z:,.0f}<extra></extra>",
+        showscale=False,
+    ))
+    pl(fig7, h=max(200, 36 * len(ht)))
+    fig7.update_layout(xaxis=dict(tickfont=dict(size=10), side="top"), yaxis=dict(tickfont=dict(size=10), autorange="reversed"))
+    fig7.update_xaxes(showgrid=False, showline=False)
+    fig7.update_yaxes(showgrid=False, showline=False)
+    st.plotly_chart(fig7, use_container_width=True)
+
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 6 — REGIONAL ANALYSIS
+    # ══════════════════════════════════════════════════════════════════════════
+    st.markdown('<div class="sec">6 · Regional Split</div>', unsafe_allow_html=True)
+
+    r4a, r4b = st.columns(2)
+
+    with r4a:
+        rg = fdf.groupby("Owner Role").agg(Value=("Opportunity PAR", "sum"), Count=("Opportunity Name", "count"),
+            Avg=("Opportunity PAR", "mean"), AvgDur=("Stage Duration", "mean")).reset_index().sort_values("Value", ascending=False)
+        top_reg = rg.iloc[0]["Owner Role"] if len(rg) else "N/A"
+        st.markdown(f'<p class="so">{top_reg} leads the pipeline by value</p>', unsafe_allow_html=True)
+        fig8 = go.Figure(go.Bar(
+            x=rg["Owner Role"], y=rg["Value"],
+            marker_color=[NY, TL, GD, BA, G600][:len(rg)],
+            text=[f"{fc(v)}<br><span style='font-size:9px'>{c} opps · Avg {fc(a)}</span>" for v, c, a in zip(rg["Value"], rg["Count"], rg["Avg"])],
+            textposition="inside", textfont=dict(size=11, color=W),
+        ))
+        pl(fig8, h=300)
+        fig8.update_layout(showlegend=False, yaxis=dict(visible=False))
+        fig8.update_xaxes(showgrid=False, tickfont=dict(size=10))
+        fig8.update_yaxes(showgrid=False, showline=False)
+        st.plotly_chart(fig8, use_container_width=True)
+
+    with r4b:
+        st.markdown('<p class="so">Region × stage: which regions are further in the pipeline?</p>', unsafe_allow_html=True)
+        rs_ht = pd.crosstab(fdf["Owner Role"], fdf["Stage"], values=fdf["Opportunity PAR"], aggfunc="sum").fillna(0)
+        ordered = [s for s in STAGE_ORDER if s in rs_ht.columns]
+        extra = [s for s in rs_ht.columns if s not in STAGE_ORDER]
+        rs_ht = rs_ht[ordered + extra]
+        stg_colors = {
+            "Information Gathering": G400, "Solutions Design": TL, "Proposal/Price Quote": BA,
+            "Proposal Price/Quote": BA, "Negotiations": GD, "Closed/Won": GN, "Closed/Lost": RD,
+        }
+        fig9 = go.Figure()
+        for col in rs_ht.columns:
+            fig9.add_trace(go.Bar(
+                x=rs_ht.index, y=rs_ht[col], name=col, marker_color=stg_colors.get(col, G400),
+                text=[fc(v) if v > 0 else "" for v in rs_ht[col]], textposition="inside", textfont=dict(size=9, color=W),
             ))
-            fig.update_layout(title=dict(text="Pipeline by Solution Resource", font=dict(size=14, color=MARKEN["navy"])))
-            plotly_layout(fig, height=380, margin=dict(l=150, r=20, t=50, b=30))
-            fig.update_xaxes(title="", tickformat="$,.0s")
-            fig.update_yaxes(title="")
-            st.plotly_chart(fig, use_container_width=True)
-
-    with col2:
-        # Opportunity Owner — bar
-        if "Opportunity Owner" in df.columns and "PAR_clean" in df.columns:
-            owner = df.groupby("Opportunity Owner").agg(
-                Value=("PAR_clean", "sum"),
-                Count=("Opportunity Owner", "size"),
-            ).reset_index().sort_values("Value", ascending=True)
-
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                y=owner["Opportunity Owner"], x=owner["Value"],
-                orientation="h",
-                marker_color=MARKEN["teal"],
-                text=[f"{fmt_currency(v)} ({c})" for v, c in zip(owner["Value"], owner["Count"])],
-                textposition="auto", textfont=dict(size=11, color="white"),
-                hovertemplate="<b>%{y}</b><br>Total: $%{x:,.0f}<extra></extra>",
-            ))
-            fig.update_layout(title=dict(text="Pipeline by Opportunity Owner (BD)", font=dict(size=14, color=MARKEN["navy"])))
-            plotly_layout(fig, height=380, margin=dict(l=150, r=20, t=50, b=30))
-            fig.update_xaxes(title="", tickformat="$,.0s")
-            fig.update_yaxes(title="")
-            st.plotly_chart(fig, use_container_width=True)
-
-    # Workload balance — treemap
-    if "Solution Resource" in df.columns and "PAR_clean" in df.columns and "Main Primary Service" in df.columns:
-        tree_df = df.dropna(subset=["PAR_clean"]).copy()
-        tree_df["Service"] = tree_df["Main Primary Service"].fillna("Other")
-        tree_data = tree_df.groupby(["Solution Resource", "Service"]).agg(
-            Value=("PAR_clean", "sum"), Count=("PAR_clean", "size")
-        ).reset_index()
-
-        if len(tree_data) > 0:
-            fig = px.treemap(
-                tree_data,
-                path=["Solution Resource", "Service"],
-                values="Value",
-                color="Value",
-                color_continuous_scale=[[0, MARKEN["pale_teal"]], [0.5, MARKEN["teal"]], [1, MARKEN["navy"]]],
-                hover_data={"Count": True, "Value": ":$,.0f"},
-            )
-            fig.update_layout(
-                title=dict(text="Resource × Service Treemap (sized by value)", font=dict(size=14, color=MARKEN["navy"])),
-                coloraxis_showscale=False,
-            )
-            fig.update_traces(textinfo="label+value", texttemplate="%{label}<br>%{value:$,.0s}")
-            plotly_layout(fig, height=400, margin=dict(l=10, r=10, t=50, b=10))
-            st.plotly_chart(fig, use_container_width=True)
+        pl(fig9, h=300, mb=10)
+        fig9.update_layout(barmode="stack", yaxis=dict(visible=False), legend=dict(font=dict(size=8)))
+        fig9.update_xaxes(showgrid=False, tickfont=dict(size=10))
+        fig9.update_yaxes(showgrid=False, showline=False)
+        st.plotly_chart(fig9, use_container_width=True)
 
 
-def render_aging_risk(df):
-    section_header("Aging & Risk Analysis", "Stage duration distribution and at-risk opportunities")
+    # ══════════════════════════════════════════════════════════════════════════
+    # 7 — SOLUTION RESOURCE WORKLOAD
+    # ══════════════════════════════════════════════════════════════════════════
+    st.markdown('<div class="sec">7 · Solution Resource Workload</div>', unsafe_allow_html=True)
 
-    col1, col2 = st.columns(2)
+    rw = fdf.groupby("Solution Resource").agg(Value=("Opportunity PAR", "sum"), Count=("Opportunity Name", "count"),
+        AvgDur=("Stage Duration", "mean"), Cust=("Account Name", "nunique")).reset_index().sort_values("Value", ascending=False)
 
-    with col1:
-        if "Stage Duration" in df.columns:
-            dur = df.dropna(subset=["Stage Duration"]).copy()
-            if len(dur) > 0:
-                # Duration buckets
-                bins = [0, 14, 30, 60, 90, float("inf")]
-                labels = ["0-14d", "15-30d", "31-60d", "61-90d", "90d+"]
-                dur["Bucket"] = pd.cut(dur["Stage Duration"], bins=bins, labels=labels, right=True)
-                bucket_agg = dur.groupby("Bucket", observed=True).agg(
-                    Count=("Bucket", "size"),
-                    Value=("PAR_clean", "sum"),
-                ).reset_index()
+    r5a, r5b = st.columns([0.6, 0.4])
 
-                colors = [MARKEN["green"], MARKEN["teal"], MARKEN["teal_light"], MARKEN["gold"], MARKEN["red"]]
+    with r5a:
+        st.markdown(f'<p class="so">{rw.iloc[0]["Solution Resource"]} carries the largest pipeline at {fc(rw.iloc[0]["Value"])}</p>' if len(rw) else '', unsafe_allow_html=True)
+        fig10 = go.Figure()
+        fig10.add_trace(go.Bar(x=rw["Solution Resource"], y=rw["Count"], name="# Opportunities", marker_color=NY,
+            text=rw["Count"], textposition="auto", textfont=dict(color=W, size=10)))
+        fig10.add_trace(go.Scatter(x=rw["Solution Resource"], y=rw["Value"], name="Total Value ($)",
+            mode="markers+lines", marker=dict(color=GD, size=9, line=dict(width=1.5, color=NY)),
+            line=dict(color=GD, width=2), yaxis="y2"))
+        pl(fig10, h=310, mb=50)
+        fig10.update_layout(
+            yaxis=dict(title="# Opps", titlefont=dict(size=9), side="left"),
+            yaxis2=dict(title="Value ($)", titlefont=dict(size=9), side="right", overlaying="y", showgrid=False),
+            xaxis=dict(tickangle=15, tickfont=dict(size=9)),
+        )
+        st.plotly_chart(fig10, use_container_width=True)
 
-                fig = go.Figure()
-                fig.add_trace(go.Bar(
-                    x=bucket_agg["Bucket"].astype(str), y=bucket_agg["Count"],
-                    marker_color=colors[:len(bucket_agg)],
-                    text=[f"{c} opps\n{fmt_currency(v)}" for c, v in zip(bucket_agg["Count"], bucket_agg["Value"])],
-                    textposition="outside", textfont=dict(size=10),
-                    hovertemplate="<b>%{x}</b><br>Count: %{y}<br>Value: $%{customdata:,.0f}<extra></extra>",
-                    customdata=bucket_agg["Value"],
-                ))
-                fig.update_layout(title=dict(text="Stage Duration Distribution", font=dict(size=14, color=MARKEN["navy"])))
-                plotly_layout(fig, height=380, margin=dict(l=40, r=20, t=50, b=40))
-                fig.update_xaxes(title="Duration Bucket")
-                fig.update_yaxes(title="# Opportunities")
-                st.plotly_chart(fig, use_container_width=True)
+    with r5b:
+        st.markdown('<p class="so">Resource detail breakdown</p>', unsafe_allow_html=True)
+        # Enrich with status counts
+        rw_status = fdf.groupby("Solution Resource")["Status"].value_counts().unstack(fill_value=0)
+        rw_merged = rw.set_index("Solution Resource").join(rw_status, how="left").reset_index()
+        rd = rw_merged.rename(columns={"Solution Resource": "Resource", "Count": "Opps", "Value": "Pipeline",
+            "AvgDur": "Avg Days", "Cust": "Customers"}).copy()
+        rd["Pipeline"] = rd["Pipeline"].apply(lambda x: f"${x:,.0f}")
+        rd["Avg Days"] = rd["Avg Days"].apply(lambda x: f"{x:.0f}")
+        # Add status columns if present
+        display_cols = ["Resource", "Opps", "Pipeline", "Avg Days", "Customers"]
+        for sc in ["Working", "Pending", "Unassigned"]:
+            if sc in rd.columns:
+                rd[sc] = rd[sc].astype(int)
+                display_cols.append(sc)
+        st.dataframe(rd[display_cols], use_container_width=True, height=310, hide_index=True)
 
-    with col2:
-        # At-risk table — long stage duration
-        if "Stage Duration" in df.columns and "PAR_clean" in df.columns:
-            at_risk = df.dropna(subset=["Stage Duration"]).nlargest(8, "Stage Duration")
-            cols = ["Account Name", "Opportunity Name", "Stage Duration", "PAR_clean", "Solution Resource"]
-            avail = [c for c in cols if c in at_risk.columns]
+    # Resource × Region
+    st.markdown('<p class="so">Resource allocation by region</p>', unsafe_allow_html=True)
+    rr = pd.crosstab(fdf["Solution Resource"], fdf["Owner Role"], values=fdf["Opportunity Name"], aggfunc="count").fillna(0).astype(int)
+    fig11 = go.Figure(go.Heatmap(
+        z=rr.values, x=rr.columns.tolist(), y=rr.index.tolist(),
+        colorscale=[[0, W], [.5, TLL], [1, NY]],
+        text=rr.values, texttemplate="%{text}", textfont=dict(size=11),
+        showscale=False,
+    ))
+    pl(fig11, h=max(180, 32 * len(rr)))
+    fig11.update_layout(xaxis=dict(tickfont=dict(size=10), side="top"), yaxis=dict(tickfont=dict(size=10), autorange="reversed"))
+    fig11.update_xaxes(showgrid=False, showline=False)
+    fig11.update_yaxes(showgrid=False, showline=False)
+    st.plotly_chart(fig11, use_container_width=True)
 
-            st.markdown("""
-            <div style="background:#FDF2E0; border-left:3px solid #D4A843; border-radius:0 8px 8px 0;
-                        padding:10px 14px; margin:0 0 10px 0;">
-                <strong style="color:#8B6914; font-size:0.85rem;">⚠ Longest Duration Opportunities</strong>
-                <div style="color:#8B6914; font-size:0.78rem; margin-top:2px;">
-                    These opportunities may require escalation or review
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 8 — TIMELINE & AGING
+    # ══════════════════════════════════════════════════════════════════════════
+    st.markdown('<div class="sec">8 · Timeline & Aging Analysis</div>', unsafe_allow_html=True)
+
+    t6a, t6b = st.columns(2)
+
+    with t6a:
+        st.markdown('<p class="so">Expected revenue by close month</p>', unsafe_allow_html=True)
+        tl = fdf.dropna(subset=["Close Date Parsed"]).copy()
+        tl["Month"] = tl["Close Date Parsed"].dt.to_period("M").dt.to_timestamp()
+        mo = tl.groupby("Month").agg(Value=("Opportunity PAR", "sum"), Count=("Opportunity Name", "count")).reset_index().sort_values("Month")
+        fig12 = go.Figure()
+        fig12.add_trace(go.Bar(x=mo["Month"], y=mo["Value"], marker_color=TL, name="Pipeline Value",
+            text=[f"{fc(v)}" for v in mo["Value"]], textposition="outside", textfont=dict(size=9)))
+        fig12.add_trace(go.Scatter(x=mo["Month"], y=mo["Count"], mode="markers+lines",
+            marker=dict(color=NY, size=7), line=dict(color=NY, width=2), name="# Opps", yaxis="y2"))
+        pl(fig12, h=310, mb=40)
+        fig12.update_layout(
+            yaxis=dict(visible=False),
+            yaxis2=dict(title="# Opps", titlefont=dict(size=9), side="right", overlaying="y", showgrid=False),
+            xaxis=dict(tickformat="%b '%y", tickfont=dict(size=9)),
+        )
+        fig12.update_xaxes(showgrid=False)
+        fig12.update_yaxes(showgrid=False, showline=False)
+        st.plotly_chart(fig12, use_container_width=True)
+
+    with t6b:
+        st.markdown('<p class="so">Stage duration distribution — identify outliers and bottlenecks</p>', unsafe_allow_html=True)
+        stages_for_box = [s for s in STAGE_ORDER if s in fdf["Stage"].unique()]
+        fig13 = go.Figure()
+        for s in stages_for_box:
+            sd = fdf[fdf["Stage"] == s]
+            fig13.add_trace(go.Box(y=sd["Stage Duration"], name=s, marker_color=TL, boxmean=True,
+                fillcolor=TLL, line=dict(color=TL)))
+        pl(fig13, h=310)
+        fig13.update_layout(showlegend=False, yaxis=dict(title="Days", titlefont=dict(size=9)), xaxis=dict(tickfont=dict(size=9)))
+        st.plotly_chart(fig13, use_container_width=True)
+
+    # Bubble chart
+    st.markdown('<p class="so">Opportunity landscape: value vs. stage duration (bubble = deal size, color = stage)</p>', unsafe_allow_html=True)
+    bdf = fdf.dropna(subset=["Close Date Parsed"]).copy()
+    stg_c = {"Information Gathering": G400, "Solutions Design": TL, "Proposal/Price Quote": BA,
+             "Proposal Price/Quote": BA, "Negotiations": GD, "Closed/Won": GN, "Closed/Lost": RD}
+    fig14 = go.Figure()
+    for stg in bdf["Stage"].unique():
+        sd = bdf[bdf["Stage"] == stg]
+        fig14.add_trace(go.Scatter(
+            x=sd["Stage Duration"], y=sd["Opportunity PAR"], mode="markers", name=stg,
+            marker=dict(size=sd["Opportunity PAR"].apply(lambda x: max(7, min(35, x / 80000))),
+                        color=stg_c.get(stg, G400), line=dict(width=1, color=W), opacity=0.85),
+            text=sd["Account Name"],
+            hovertemplate="<b>%{text}</b><br>Duration: %{x}d<br>Value: $%{y:,.0f}<extra></extra>",
+        ))
+    fig14.add_vline(x=60, line_dash="dot", line_color=RD, opacity=0.4, annotation_text="60d", annotation_position="top")
+    pl(fig14, h=340, mb=40)
+    fig14.update_layout(
+        xaxis=dict(title="Stage Duration (days)", titlefont=dict(size=10)),
+        yaxis=dict(title="PAR Value ($)", titlefont=dict(size=10)),
+        legend=dict(font=dict(size=8.5)),
+    )
+    st.plotly_chart(fig14, use_container_width=True)
+
+    # Aging table
+    st.markdown('<p class="so">Aging flags — opportunities requiring attention</p>', unsafe_allow_html=True)
+    ag = fdf.copy()
+    ag["Flag"] = ""
+    ag.loc[ag["Stage Duration"] > 90, "Flag"] = "🔴 >90d"
+    ag.loc[(ag["Stage Duration"] > 60) & (ag["Stage Duration"] <= 90), "Flag"] = "🟡 >60d"
+    ag.loc[ag["Close Date Parsed"] < TODAY, "Flag"] = ag.loc[ag["Close Date Parsed"] < TODAY, "Flag"].astype(str) + " ⚠ Past Due"
+    ag_flagged = ag[ag["Flag"].str.len() > 0].sort_values("Stage Duration", ascending=False)
+    if len(ag_flagged):
+        st.dataframe(
+            ag_flagged[["Flag", "Account Name", "Opportunity Name", "Stage", "Status", "Product",
+                         "Opportunity PAR", "Stage Duration", "Close Date", "Notes"]].style.format({"Opportunity PAR": "${:,.0f}"}),
+            use_container_width=True, height=min(300, 35 * len(ag_flagged) + 38), hide_index=True,
+        )
+    else:
+        st.success("No aging flags — all opportunities within normal parameters.")
+
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 9 — RISK & CLOSED/LOST
+    # ══════════════════════════════════════════════════════════════════════════
+    st.markdown('<div class="sec">9 · Risk & Attention Items</div>', unsafe_allow_html=True)
+
+    r7a, r7b = st.columns(2)
+
+    with r7a:
+        lost = fdf[fdf["Stage"] == "Closed/Lost"]
+        if len(lost):
+            st.markdown(f'<div class="al al-r"><b>{len(lost)} Closed/Lost</b> opportunities totaling <b>{fc(lost["Opportunity PAR"].sum())}</b></div>', unsafe_allow_html=True)
+            for _, r in lost.iterrows():
+                st.markdown(f"""
+                <div style="background:{W}; border:1px solid {G200}; border-radius:4px; padding:.7rem .9rem; margin-bottom:.4rem; font-size:.78rem;">
+                    <b style="color:{NY};">{r['Account Name']}</b> · {fc(r['Opportunity PAR'])}<br>
+                    <span style="color:{G600};">{r['Notes'] if pd.notna(r['Notes']) else 'No notes'}</span>
                 </div>
-            </div>
-            """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
+        else:
+            st.success("No Closed/Lost opportunities in current view.")
 
-            disp = at_risk[avail].copy()
-            disp = disp.rename(columns={"PAR_clean": "Value (USD)", "Stage Duration": "Days"})
-            st.dataframe(disp, use_container_width=True, height=300,
-                         column_config={"Value (USD)": st.column_config.NumberColumn(format="$%,.0f")})
-
-
-def render_notes_explorer(df):
-    section_header("Notes & Activity Log", "Team commentary and latest updates across the pipeline")
-
-    if "Notes" in df.columns:
-        search = st.text_input("🔍  Search notes, accounts, or opportunity names", "", key="notes_search")
-
-        display = df.copy()
-        if search:
-            mask = pd.Series(False, index=display.index)
-            for col in ["Notes", "Account Name", "Opportunity Name", "Solution Resource"]:
-                if col in display.columns:
-                    mask |= display[col].astype(str).str.contains(search, case=False, na=False)
-            display = display[mask]
-
-        st.markdown(f"<p style='color:{MARKEN['gray_600']}; font-size:0.8rem;'>{len(display)} results</p>",
-                    unsafe_allow_html=True)
-
-        show_cols = ["Account Name", "Opportunity Name", "Solution Resource", "Status_display",
-                     "PAR_clean", "Stage Duration", "Notes"]
-        avail = [c for c in show_cols if c in display.columns]
-        disp = display[avail].copy()
-        disp = disp.rename(columns={"Status_display": "Status", "PAR_clean": "Value (USD)"})
-        st.dataframe(disp, use_container_width=True, height=450,
-                     column_config={
-                         "Value (USD)": st.column_config.NumberColumn(format="$%,.0f"),
-                         "Notes": st.column_config.TextColumn(width="large"),
-                     })
+    with r7b:
+        st.markdown('<p class="so">Largest deals at risk (high value + high duration)</p>', unsafe_allow_html=True)
+        risk = fdf[~fdf["Stage"].str.contains("Closed", na=False)].copy()
+        risk["RiskScore"] = risk["Opportunity PAR"] * np.log1p(risk["Stage Duration"])
+        risk_top = risk.nlargest(5, "RiskScore")
+        if len(risk_top):
+            fig15 = go.Figure(go.Bar(
+                y=risk_top["Account Name"], x=risk_top["Opportunity PAR"], orientation="h",
+                marker_color=[RD if d > 60 else GD if d > 30 else TL for d in risk_top["Stage Duration"]],
+                text=[f"  {fc(v)} · {d}d" for v, d in zip(risk_top["Opportunity PAR"], risk_top["Stage Duration"])],
+                textposition="outside", textfont=dict(size=10, color=G800),
+            ))
+            pl(fig15, h=220)
+            fig15.update_layout(showlegend=False, xaxis=dict(visible=False), yaxis=dict(tickfont=dict(size=9.5)))
+            fig15.update_xaxes(showgrid=False, showline=False)
+            fig15.update_yaxes(showgrid=False, showline=False)
+            st.plotly_chart(fig15, use_container_width=True)
 
 
-def render_export(df):
-    section_header("Export & Report", "Download filtered data or a formatted executive summary")
+    # ══════════════════════════════════════════════════════════════════════════
+    # 10 — OPPORTUNITY OWNER ANALYSIS
+    # ══════════════════════════════════════════════════════════════════════════
+    st.markdown('<div class="sec">10 · Opportunity Owner Performance</div>', unsafe_allow_html=True)
 
-    col1, col2 = st.columns(2)
+    ow = fdf.groupby("Opportunity Owner").agg(Value=("Opportunity PAR", "sum"), Count=("Opportunity Name", "count"),
+        Avg=("Opportunity PAR", "mean"), AvgDur=("Stage Duration", "mean")).reset_index().sort_values("Value", ascending=False)
 
-    with col1:
-        # Excel export
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-            export_df = df.copy()
-            # Clean up for export
-            drop_cols = [c for c in export_df.columns if c.endswith("_dt") or c.endswith("_display") or c == "PAR_clean"]
-            export_df = export_df.drop(columns=[c for c in drop_cols if c in export_df.columns], errors="ignore")
-            export_df.to_excel(writer, sheet_name="Pipeline Data", index=False)
-
-            # Summary sheet
-            summary_data = {
-                "Metric": ["Total Opportunities", "Total Pipeline Value", "Average Deal Size",
-                           "Unique Accounts", "Avg Stage Duration (days)"],
-                "Value": [
-                    len(df),
-                    f"${df['PAR_clean'].sum():,.0f}" if "PAR_clean" in df.columns else "N/A",
-                    f"${df['PAR_clean'].mean():,.0f}" if "PAR_clean" in df.columns else "N/A",
-                    df["Account Name"].nunique() if "Account Name" in df.columns else "N/A",
-                    f"{df['Stage Duration'].mean():.0f}" if "Stage Duration" in df.columns else "N/A",
-                ],
-            }
-            pd.DataFrame(summary_data).to_excel(writer, sheet_name="Summary", index=False)
-
-            # Format workbook
-            wb = writer.book
-            header_fmt = wb.add_format({
-                "bold": True, "bg_color": "#003B5C", "font_color": "white",
-                "border": 1, "font_name": "Segoe UI", "font_size": 11,
-            })
-            for sheet_name in writer.sheets:
-                ws = writer.sheets[sheet_name]
-                for col_idx, col_name in enumerate(export_df.columns if sheet_name == "Pipeline Data" else summary_data.keys()):
-                    ws.write(0, col_idx, col_name, header_fmt)
-                    ws.set_column(col_idx, col_idx, 20)
-
-        st.download_button(
-            label="📥  Download Filtered Data (Excel)",
-            data=buffer.getvalue(),
-            file_name=f"Marken_Solutions_Pipeline_{datetime.now().strftime('%Y%m%d')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-        )
-
-    with col2:
-        # CSV quick export
-        csv = df.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            label="📥  Download as CSV",
-            data=csv,
-            file_name=f"Marken_Solutions_Pipeline_{datetime.now().strftime('%Y%m%d')}.csv",
-            mime="text/csv",
-            use_container_width=True,
-        )
+    o8a, o8b = st.columns([0.55, 0.45])
+    with o8a:
+        st.markdown('<p class="so">Top opportunity owners by pipeline value</p>', unsafe_allow_html=True)
+        ow_top = ow.head(10).sort_values("Value", ascending=True)
+        fig16 = go.Figure(go.Bar(
+            y=ow_top["Opportunity Owner"], x=ow_top["Value"], orientation="h", marker_color=NY,
+            text=[f"  {fc(v)} ({c})" for v, c in zip(ow_top["Value"], ow_top["Count"])],
+            textposition="outside", textfont=dict(size=9.5, color=G800),
+        ))
+        pl(fig16, h=max(280, 32 * len(ow_top)))
+        fig16.update_layout(showlegend=False, xaxis=dict(visible=False), yaxis=dict(tickfont=dict(size=9.5)))
+        fig16.update_xaxes(showgrid=False, showline=False)
+        fig16.update_yaxes(showgrid=False, showline=False)
+        st.plotly_chart(fig16, use_container_width=True)
+    with o8b:
+        st.markdown('<p class="so">Owner performance table</p>', unsafe_allow_html=True)
+        od = ow.rename(columns={"Opportunity Owner": "Owner", "Count": "Opps", "Value": "Pipeline", "Avg": "Avg Deal", "AvgDur": "Avg Days"}).copy()
+        od["Pipeline"] = od["Pipeline"].apply(lambda x: f"${x:,.0f}")
+        od["Avg Deal"] = od["Avg Deal"].apply(lambda x: f"${x:,.0f}")
+        od["Avg Days"] = od["Avg Days"].apply(lambda x: f"{x:.0f}")
+        st.dataframe(od, use_container_width=True, height=max(280, 32 * len(ow_top)), hide_index=True)
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# MAIN APP
-# ──────────────────────────────────────────────────────────────────────────────
-def main():
-    # Upload state
-    uploaded = st.sidebar.file_uploader(
-        "Upload Masterfile (.xlsx)",
-        type=["xlsx", "xls"],
-        help="Upload the Solutions Masterfile exported from Salesforce with team annotations.",
+    # ══════════════════════════════════════════════════════════════════════════
+    # 11 — FULL PIPELINE TABLE
+    # ══════════════════════════════════════════════════════════════════════════
+    st.markdown('<div class="sec">11 · Full Pipeline Detail</div>', unsafe_allow_html=True)
+    tbl = fdf[["Stage", "Status", "Product", "Account Name", "Opportunity Name", "Solution Resource", "Opportunity Owner",
+               "Main Primary Service", "Opportunity PAR", "Stage Duration", "Close Date",
+               "Received by Solutions", "Closed by Solutions", "Notes"]].copy()
+    tbl = tbl.sort_values(["Stage", "Opportunity PAR"], ascending=[True, False])
+    st.dataframe(
+        tbl.style.format({"Opportunity PAR": "${:,.0f}"}),
+        use_container_width=True, height=min(500, 35 * len(tbl) + 38), hide_index=True,
+        column_config={
+            "Account Name": st.column_config.TextColumn("Customer", width="medium"),
+            "Opportunity Name": st.column_config.TextColumn("Opportunity", width="large"),
+            "Main Primary Service": st.column_config.TextColumn("Service", width="medium"),
+            "Status": st.column_config.TextColumn("Status", width="small"),
+            "Product": st.column_config.TextColumn("Product", width="small"),
+        },
     )
 
-    if uploaded is None:
-        # Landing page
-        st.markdown("""
-        <div class="header-bar">
-            <div class="marken-label">Solutions Team — Global Pipeline Dashboard</div>
-            <h1>Welcome</h1>
-            <div class="subtitle">Upload your Solutions Masterfile to get started</div>
-        </div>
-        """, unsafe_allow_html=True)
 
-        st.markdown("""
-        <div style="text-align:center; padding:4rem 2rem;">
-            <div style="font-size:3rem; margin-bottom:1rem;">📊</div>
-            <h3 style="color:#003B5C; margin-bottom:0.5rem;">Upload Your Masterfile</h3>
-            <p style="color:#64748B; max-width:500px; margin:0 auto; line-height:1.6;">
-                Use the file uploader in the sidebar to load your Solutions team Masterfile.
-                The dashboard will automatically generate a full executive overview with interactive
-                charts, KPIs, and exportable reports.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-        return
+    # ══════════════════════════════════════════════════════════════════════════
+    # 12 — EXECUTIVE SUMMARY
+    # ══════════════════════════════════════════════════════════════════════════
+    st.markdown('<div class="sec">12 · Executive Summary</div>', unsafe_allow_html=True)
 
-    # Load data
-    df = load_and_clean(uploaded)
+    top_c = fdf.groupby("Account Name")["Opportunity PAR"].sum().idxmax() if n_opp else "N/A"
+    top_cv = fdf.groupby("Account Name")["Opportunity PAR"].sum().max() if n_opp else 0
+    top_sv = fdf.groupby("Main Primary Service")["Opportunity PAR"].sum().idxmax() if n_opp else "N/A"
+    n_des = len(fdf[fdf["Stage"] == "Solutions Design"])
+    n_pro = len(fdf[fdf["Stage"].str.contains("Proposal|Price", case=False, na=False)])
+    n_neg = len(fdf[fdf["Stage"] == "Negotiations"])
+    top5p = cu.head(5)["Value"].sum() / cu["Value"].sum() * 100 if len(cu) and cu["Value"].sum() > 0 else 0
 
-    # Sidebar filters
-    filters = render_sidebar(df)
-    fdf = apply_filters(df, filters)
+    reg_lead = f"with <b>{top_reg}</b> leading at <b>{fc(rg.iloc[0]['Value'])}</b>" if len(rg) else ""
 
-    # Filtered count notice
-    if len(fdf) < len(df):
-        st.sidebar.markdown(
-            f"<div style='text-align:center; padding:8px; background:rgba(0,145,218,0.15); border-radius:6px; margin-top:8px;'>"
-            f"<span style='font-size:0.78rem; color:#0091DA; font-weight:600;'>"
-            f"Showing {len(fdf)} of {len(df)} opportunities</span></div>",
-            unsafe_allow_html=True
-        )
+    # Product summary
+    prod_tagged = fdf[fdf["Product"] != "General"]
+    n_prod_tagged = len(prod_tagged)
+    prod_list = ", ".join(fdf[fdf["Product"] != "General"]["Product"].unique()) if n_prod_tagged else "None tagged"
 
-    # ── Render all sections ─────────────────────────────────────
-    render_header(fdf)
-    render_kpis(fdf)
-
-    st.markdown('<hr class="subtle-divider">', unsafe_allow_html=True)
-
-    # Navigation tabs
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-        "📋 Executive Summary",
-        "📊 Pipeline Analysis",
-        "🔄 Solutions Tracker",
-        "🏢 Customers",
-        "👥 Team",
-        "⏱ Aging & Risk",
-        "📝 Notes & Export",
-    ])
-
-    with tab1:
-        render_executive_summary(fdf)
-    with tab2:
-        render_pipeline_analysis(fdf)
-    with tab3:
-        render_solutions_status(fdf)
-    with tab4:
-        render_customer_analysis(fdf)
-    with tab5:
-        render_team_analysis(fdf)
-    with tab6:
-        render_aging_risk(fdf)
-    with tab7:
-        render_notes_explorer(fdf)
-        st.markdown('<hr class="subtle-divider">', unsafe_allow_html=True)
-        render_export(fdf)
+    st.markdown(f"""<div class="es">
+The Solutions team is currently managing <b>{n_opp} active opportunities</b> representing
+a total pipeline value of <b>{fc(total)}</b> across <b>{n_cust} unique customers</b>
+and <b>{n_svc} service categories</b>.
+<br><br>
+<b>Stage composition:</b> {n_des} opportunities are in Solutions Design ({pct(n_des, n_opp)}),
+{n_pro} in Proposal/Price Quote, {n_neg} in Negotiations, and {len(lost)} were Closed/Lost
+({fc(lost['Opportunity PAR'].sum())} lost value).
+<br><br>
+<b>Status overview:</b> Of all opportunities, <b>{n_working} are actively being worked</b>,
+{n_pending} are pending action, and {n_unassigned} remain unassigned.
+This signals capacity for re-prioritization across the Solutions team.
+<br><br>
+<b>Product tagging:</b> <b>{n_prod_tagged} of {n_opp}</b> opportunities have a product classification
+({prod_list}). Expanding product tagging will improve pipeline segmentation and forecasting accuracy.
+<br><br>
+<b>Customer concentration:</b> The top 5 accounts represent <b>{top5p:.0f}%</b> of pipeline value,
+led by <b>{top_c}</b> at {fc(top_cv)}. This is a notable concentration risk.
+The dominant service type is <b>{top_sv}</b>.
+<br><br>
+<b>Regional coverage:</b> Pipeline spans <b>{fdf['Owner Role'].nunique()} regions</b>
+{reg_lead}.
+<b>{fdf['Solution Resource'].nunique()} Solution Resources</b> are actively engaged.
+<br><br>
+<b>Attention items:</b> <b>{len(past_due)} opportunities</b> ({fc(past_due['Opportunity PAR'].sum())})
+have close dates that have already passed.
+<b>{len(aging_60)} opportunities</b> have been in their current stage for over 60 days.
+Average stage duration stands at <b>{avg_dur:.0f} days</b>.
+</div>""", unsafe_allow_html=True)
 
 
-if __name__ == "__main__":
-    main()
+# ═══════════════════════════════════════════════════════════════════════════════
+#  MASTERFILE MANAGER
+# ═══════════════════════════════════════════════════════════════════════════════
+elif page == "Masterfile Manager":
+
+    st.markdown(f"""
+    <div class="wf">
+        <b>Workflow</b><br><br>
+        <span class="ws">1</span> Download fresh data from Salesforce<br>
+        <span class="ws">2</span> Upload here — the app <b>merges</b> new SF data into the Masterfile<br>
+        <span class="ws">3</span> Salesforce fields refresh · <b>Team columns preserved</b> (Solutions Notes, Tasks, Action Items, Comments)<br>
+        <span class="ws">4</span> New columns tracked: <b>Status</b>, <b>Received by Solutions</b>, <b>Closed by Solutions</b>, <b>Product</b><br>
+        <span class="ws">5</span> Edit team columns inline below<br>
+        <span class="ws">6</span> Download the updated Masterfile
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown('<div class="sec">Upload New Salesforce Export to Merge</div>', unsafe_allow_html=True)
+    mf = st.file_uploader("Upload new SF export. Team columns will be preserved.", type=["xlsx", "xls", "csv"], key="mu")
+    if mf:
+        raw = pd.read_csv(mf) if mf.name.endswith(".csv") else pd.read_excel(mf)
+        new_sf = clean_upload(raw)
+        merged, stats = merge_masterfile(st.session_state.master.copy(), new_sf)
+        st.session_state.master = merged
+        st.success(f"Merge complete — **{stats['updated']}** updated · **{stats['added']}** added · **{stats['removed']}** flagged · **{stats['total']}** total")
+        st.rerun()
+
+    st.markdown('<div class="sec">Masterfile — Editable</div>', unsafe_allow_html=True)
+    st.caption("Salesforce columns are locked. Edit the four team columns (teal-highlighted in Excel download).")
+
+    edf = st.session_state.master.copy()
+    for c in TEAM_COLS:
+        if c not in edf.columns:
+            edf[c] = ""
+
+    edited = st.data_editor(
+        edf, use_container_width=True, height=min(600, 35 * len(edf) + 38), num_rows="dynamic",
+        column_config={
+            "Stage": st.column_config.TextColumn("Stage", disabled=True),
+            "Account Name": st.column_config.TextColumn("Customer", disabled=True),
+            "Opportunity Name": st.column_config.TextColumn("Opportunity", disabled=True, width="large"),
+            "Opportunity PAR": st.column_config.NumberColumn("PAR ($)", format="$%d", disabled=True),
+            "Stage Duration": st.column_config.NumberColumn("Days", disabled=True),
+            "Close Date": st.column_config.TextColumn("Close", disabled=True),
+            "Owner Role": st.column_config.TextColumn("Region", disabled=True),
+            "Opportunity Owner": st.column_config.TextColumn("Opp Owner", disabled=True),
+            "Solution Resource": st.column_config.TextColumn("Sol. Resource", disabled=True),
+            "Main Primary Service": st.column_config.TextColumn("Service", disabled=True),
+            "Notes": st.column_config.TextColumn("SF Notes", disabled=True),
+            "Status": st.column_config.TextColumn("Status", disabled=True),
+            "Received by Solutions": st.column_config.TextColumn("Received", disabled=True),
+            "Closed by Solutions": st.column_config.TextColumn("Closed", disabled=True),
+            "Product": st.column_config.TextColumn("Product", disabled=True),
+            "Solutions Notes": st.column_config.TextColumn("Solutions Notes", width="large"),
+            "Tasks": st.column_config.TextColumn("Tasks", width="large"),
+            "Action Items": st.column_config.TextColumn("Action Items", width="large"),
+            "Comments / Results": st.column_config.TextColumn("Comments / Results", width="large"),
+        },
+        hide_index=True, key="editor",
+    )
+
+    if st.button("Save edits", type="primary"):
+        st.session_state.master = edited.copy()
+        st.success("Edits saved to session.")
+
+    st.markdown("---")
+    d1, d2, _ = st.columns([1, 1, 2])
+    with d1:
+        st.download_button("Download Masterfile (.xlsx)", data=to_excel(st.session_state.master),
+            file_name=f"Solutions_Masterfile_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    with d2:
+        st.download_button("Download Masterfile (.csv)", data=st.session_state.master.to_csv(index=False).encode(),
+            file_name=f"Solutions_Masterfile_{datetime.now().strftime('%Y-%m-%d')}.csv", mime="text/csv")
+
+# Footer
+st.markdown(f'<div class="ft">MARKEN · UPS HEALTHCARE PRECISION LOGISTICS &nbsp;|&nbsp; SOLUTIONS TEAM PIPELINE REPORT &nbsp;|&nbsp; CONFIDENTIAL</div>', unsafe_allow_html=True)
