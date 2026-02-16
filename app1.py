@@ -58,20 +58,20 @@ section[data-testid="stSidebar"] hr {{ border-color:rgba(255,255,255,0.10); }}
 .rh-c {{ font-size:.54rem; color:{GD}; font-weight:600; letter-spacing:.14em; text-transform:uppercase; margin-top:.15rem; }}
 
 /* KPIs */
-.kr {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(155px,1fr)); gap:.85rem; margin-bottom:1.8rem; }}
+.kr {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(155px,1fr)); gap:1rem; margin-bottom:2.2rem; }}
 .kp {{ background:{W}; border:1px solid {G200}; border-top:3px solid var(--ac,{TL}); border-radius:6px;
-    padding:1rem 1.1rem .9rem; transition:box-shadow 0.2s ease; }}
+    padding:1.1rem 1.2rem 1rem; transition:box-shadow 0.2s ease; }}
 .kp:hover {{ box-shadow:0 3px 12px rgba(0,43,73,0.07); }}
 .kp-l {{ font-size:.56rem; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:{G400}; margin-bottom:.3rem; }}
 .kp-v {{ font-size:1.35rem; font-weight:700; color:{NY}; letter-spacing:-.03em; line-height:1.15; }}
 .kp-d {{ font-size:.64rem; color:{G600}; margin-top:.15rem; }}
 
-/* Section header — increased spacing */
+/* Section header — generous spacing */
 .sec {{ font-size:.62rem; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:{NY};
-    margin:2.2rem 0 .7rem 0; padding-bottom:.35rem; border-bottom:2px solid {TL}; display:inline-block; }}
+    margin:2.8rem 0 .8rem 0; padding-bottom:.4rem; border-bottom:2px solid {TL}; display:inline-block; }}
 
 /* MBB insight callout */
-.so {{ font-size:.78rem; color:{NY}; font-weight:600; margin:.25rem 0 .8rem 0; line-height:1.45; }}
+.so {{ font-size:.78rem; color:{NY}; font-weight:600; margin:.3rem 0 1rem 0; line-height:1.45; }}
 
 /* Card wrapper for chart groups */
 .cw {{ background:{W}; border:1px solid {G200}; border-radius:6px; padding:1.3rem 1.4rem 1rem; margin-bottom:.5rem; }}
@@ -127,7 +127,7 @@ STATUS_COLORS = {"Working": GN, "Pending": AM, "Completed": BA, "Unassigned": G4
 # ── Spacer helper ────────────────────────────────────────────────────────────
 def spacer(size="md"):
     """Insert vertical whitespace between sections."""
-    h = {"sm": "0.6rem", "md": "1.2rem", "lg": "2rem"}.get(size, "1.2rem")
+    h = {"sm": "0.8rem", "md": "1.6rem", "lg": "2.8rem", "xl": "3.5rem"}.get(size, "1.6rem")
     st.markdown(f'<div style="height:{h}"></div>', unsafe_allow_html=True)
 
 
@@ -137,6 +137,25 @@ def parse_par(val):
     s = str(val).strip().upper().replace("USD","").replace("$","").replace(",","").strip()
     try: return float(s)
     except ValueError: return 0.0
+
+
+def fix_excel_eu_date(val):
+    """Fix dates where Excel misinterpreted DD/MM as MM/DD.
+    European-format columns (Received by Solutions, Closed by Solutions)
+    get mangled by Excel when day ≤ 12 — it swaps month and day.
+    Strings like '27/1/2026' survive; datetimes like 2026-10-02 need fixing."""
+    if pd.isna(val):
+        return pd.NaT
+    if isinstance(val, str):
+        return pd.to_datetime(val, dayfirst=True, errors="coerce")
+    try:
+        ts = pd.Timestamp(val)
+        # If the day component is ≤ 12, Excel likely swapped month ↔ day
+        if ts.day <= 12 and ts.month != ts.day:
+            return pd.Timestamp(year=ts.year, month=ts.day, day=ts.month)
+        return ts
+    except Exception:
+        return pd.NaT
 
 
 def fmt_date(val):
@@ -162,12 +181,14 @@ def clean_upload(df):
         df["Opportunity PAR"] = df["Opportunity PAR"].apply(parse_par)
     if "Stage Duration" in df.columns:
         df["Stage Duration"] = pd.to_numeric(df["Stage Duration"], errors="coerce").fillna(0).astype(int)
+    # Close Date uses US format (MM/DD/YYYY)
     if "Close Date" in df.columns:
         df["Close Date"] = pd.to_datetime(df["Close Date"], errors="coerce", dayfirst=False)
+    # Received / Closed by Solutions use EU format (DD/MM/YYYY) — fix Excel swap
     if "Received by Solutions" in df.columns:
-        df["Received by Solutions"] = pd.to_datetime(df["Received by Solutions"], errors="coerce", dayfirst=True)
+        df["Received by Solutions"] = df["Received by Solutions"].apply(fix_excel_eu_date)
     if "Closed by Solutions" in df.columns:
-        df["Closed by Solutions"] = pd.to_datetime(df["Closed by Solutions"], errors="coerce", dayfirst=True)
+        df["Closed by Solutions"] = df["Closed by Solutions"].apply(fix_excel_eu_date)
     if "Status" in df.columns:  df["Status"] = df["Status"].fillna("Unassigned")
     if "Product" in df.columns: df["Product"] = df["Product"].fillna("General")
     return df.reset_index(drop=True)
@@ -387,15 +408,15 @@ if page == "Dashboard":
     </div>
     """, unsafe_allow_html=True)
 
-    spacer("md")
+    spacer("lg")
 
     # ══════════════════════════════════════════════════════════════════════════
     # 1 — PIPELINE OVERVIEW
     # ══════════════════════════════════════════════════════════════════════════
     st.markdown('<div class="sec">1 · Pipeline Overview</div>', unsafe_allow_html=True)
-    spacer("sm")
+    spacer("md")
 
-    p1a, _, p1b = st.columns([1.1, 0.05, 0.85])
+    p1a, _, p1b = st.columns([1.08, 0.08, 0.84])
 
     with p1a:
         st.markdown('<p class="so">Solutions Design holds the bulk of pipeline — most value remains in early stages</p>', unsafe_allow_html=True)
@@ -415,7 +436,7 @@ if page == "Dashboard":
             text=[f"{fc(v)}<br><span style='font-size:9px;color:{G600}'>{c} opps</span>" for v,c in zip(sg["Value"],sg["Count"])],
             textposition="outside", textfont=dict(size=10.5),
         ))
-        pl(fig, h=370, mb=16)
+        pl(fig, h=410, mb=16)
         fig.update_layout(showlegend=False, yaxis=dict(visible=False))
         fig.update_xaxes(showgrid=False, tickfont=dict(size=10))
         fig.update_yaxes(showgrid=False, showline=False)
@@ -432,20 +453,20 @@ if page == "Dashboard":
         fig2.add_trace(go.Pie(labels=sg2["Stage"], values=sg2["Count"], hole=.52,
             marker=dict(colors=colors), textinfo="percent", textfont=dict(size=10),
             hovertemplate="<b>%{label}</b><br>%{value} opps<extra></extra>", sort=False), 1, 2)
-        pl(fig2, h=370)
+        pl(fig2, h=410)
         fig2.update_layout(showlegend=False)
         fig2.update_annotations(font=dict(size=10, color=G600))
         st.plotly_chart(fig2, use_container_width=True)
 
-    spacer("lg")
+    spacer("xl")
 
     # ══════════════════════════════════════════════════════════════════════════
     # 2 — STATUS & SOLUTIONS VELOCITY
     # ══════════════════════════════════════════════════════════════════════════
     st.markdown('<div class="sec">2 · Solutions Status & Velocity</div>', unsafe_allow_html=True)
-    spacer("sm")
+    spacer("md")
 
-    s2a, _, s2b, _, s2c = st.columns([0.33, 0.02, 0.33, 0.02, 0.30])
+    s2a, _, s2b, _, s2c = st.columns([0.32, 0.03, 0.32, 0.03, 0.27])
 
     with s2a:
         st.markdown('<p class="so">Opportunity status distribution</p>', unsafe_allow_html=True)
@@ -456,7 +477,7 @@ if page == "Dashboard":
             text=[f"{c}<br><span style='font-size:9px;color:{G600}'>{fc(v)}</span>" for c,v in zip(stat_g["Count"],stat_g["Value"])],
             textposition="outside", textfont=dict(size=11),
         ))
-        pl(fig_stat, h=340, mb=16)
+        pl(fig_stat, h=380, mb=16)
         fig_stat.update_layout(showlegend=False, yaxis=dict(visible=False), bargap=0.35)
         fig_stat.update_xaxes(showgrid=False)
         fig_stat.update_yaxes(showgrid=False, showline=False)
@@ -470,7 +491,7 @@ if page == "Dashboard":
             textinfo="label+percent", textfont=dict(size=10.5),
             hovertemplate="<b>%{label}</b><br>$%{value:,.0f}<br>%{percent}<extra></extra>",
         ))
-        pl(fig_stat2, h=340)
+        pl(fig_stat2, h=380)
         fig_stat2.update_layout(showlegend=False)
         st.plotly_chart(fig_stat2, use_container_width=True)
 
@@ -483,7 +504,7 @@ if page == "Dashboard":
                 wk = rcv.groupby("Rcv Week").agg(Count=("Opportunity Name","count"), Value=("Opportunity PAR","sum")).reset_index()
                 fig_rcv = go.Figure(go.Bar(x=wk["Rcv Week"], y=wk["Count"], marker_color=TL, name="Received",
                     text=wk["Count"], textposition="outside", textfont=dict(size=10.5)))
-                pl(fig_rcv, h=340, mb=16)
+                pl(fig_rcv, h=380, mb=16)
                 fig_rcv.update_layout(showlegend=False, yaxis=dict(visible=False), bargap=0.3,
                     xaxis=dict(tickformat="%d-%b", tickfont=dict(size=9.5)))
                 fig_rcv.update_xaxes(showgrid=False)
@@ -494,7 +515,7 @@ if page == "Dashboard":
         else:
             st.info("'Received by Solutions' column not found.")
 
-    spacer("md")
+    spacer("lg")
 
     # Resource × Status heatmap
     st.markdown('<p class="so">Solution Resource workload by status — identify capacity constraints and bottlenecks</p>', unsafe_allow_html=True)
@@ -508,21 +529,21 @@ if page == "Dashboard":
         hovertemplate="Resource: %{y}<br>Status: %{x}<br>Count: %{z}<extra></extra>",
         showscale=False, xgap=4, ygap=4,
     ))
-    pl(fig_rs, h=max(220, 42*len(rs_stat)), mt=8)
+    pl(fig_rs, h=max(260, 48*len(rs_stat)), mt=8)
     fig_rs.update_layout(xaxis=dict(tickfont=dict(size=10.5), side="top"), yaxis=dict(tickfont=dict(size=10.5), autorange="reversed"))
     fig_rs.update_xaxes(showgrid=False, showline=False)
     fig_rs.update_yaxes(showgrid=False, showline=False)
     st.plotly_chart(fig_rs, use_container_width=True)
 
-    spacer("lg")
+    spacer("xl")
 
     # ══════════════════════════════════════════════════════════════════════════
     # 3 — PRODUCT ANALYSIS
     # ══════════════════════════════════════════════════════════════════════════
     st.markdown('<div class="sec">3 · Product Segmentation</div>', unsafe_allow_html=True)
-    spacer("sm")
+    spacer("md")
 
-    p3a, _, p3b = st.columns([0.50, 0.04, 0.46])
+    p3a, _, p3b = st.columns([0.48, 0.06, 0.46])
 
     with p3a:
         prod_g = fdf.groupby("Product").agg(Value=("Opportunity PAR","sum"), Count=("Opportunity Name","count"),
@@ -536,7 +557,7 @@ if page == "Dashboard":
             text=[f"{fc(v)}<br><span style='font-size:9px;color:{G600}'>{c} opps</span>" for v,c in zip(prod_g["Value"],prod_g["Count"])],
             textposition="outside", textfont=dict(size=10.5),
         ))
-        pl(fig_prod, h=360, mb=16)
+        pl(fig_prod, h=400, mb=16)
         fig_prod.update_layout(showlegend=False, yaxis=dict(visible=False), bargap=0.35)
         fig_prod.update_xaxes(showgrid=False, tickfont=dict(size=10.5))
         fig_prod.update_yaxes(showgrid=False, showline=False)
@@ -552,13 +573,13 @@ if page == "Dashboard":
             hovertemplate="Product: %{y}<br>Region: %{x}<br>Value: $%{z:,.0f}<extra></extra>",
             showscale=False, xgap=4, ygap=4,
         ))
-        pl(fig_pr, h=max(240, 60*len(pr_ht)), mt=8)
+        pl(fig_pr, h=max(280, 66*len(pr_ht)), mt=8)
         fig_pr.update_layout(xaxis=dict(tickfont=dict(size=10.5), side="top"), yaxis=dict(tickfont=dict(size=10.5), autorange="reversed"))
         fig_pr.update_xaxes(showgrid=False, showline=False)
         fig_pr.update_yaxes(showgrid=False, showline=False)
         st.plotly_chart(fig_pr, use_container_width=True)
 
-    spacer("md")
+    spacer("lg")
 
     # Product × Service
     st.markdown('<p class="so">Product × Service cross-reference — identifying service-product alignment</p>', unsafe_allow_html=True)
@@ -570,21 +591,21 @@ if page == "Dashboard":
         hovertemplate="Product: %{y}<br>Service: %{x}<br>Value: $%{z:,.0f}<extra></extra>",
         showscale=False, xgap=4, ygap=4,
     ))
-    pl(fig_ps, h=max(220, 60*len(ps_ht)), mt=8)
+    pl(fig_ps, h=max(260, 66*len(ps_ht)), mt=8)
     fig_ps.update_layout(xaxis=dict(tickfont=dict(size=10), side="top"), yaxis=dict(tickfont=dict(size=10.5), autorange="reversed"))
     fig_ps.update_xaxes(showgrid=False, showline=False)
     fig_ps.update_yaxes(showgrid=False, showline=False)
     st.plotly_chart(fig_ps, use_container_width=True)
 
-    spacer("lg")
+    spacer("xl")
 
     # ══════════════════════════════════════════════════════════════════════════
     # 4 — CUSTOMER ANALYSIS
     # ══════════════════════════════════════════════════════════════════════════
     st.markdown('<div class="sec">4 · Customer Concentration</div>', unsafe_allow_html=True)
-    spacer("sm")
+    spacer("md")
 
-    c2a, _, c2b = st.columns([1.1, 0.05, 0.85])
+    c2a, _, c2b = st.columns([1.08, 0.08, 0.84])
 
     with c2a:
         cu = fdf.groupby("Account Name").agg(Value=("Opportunity PAR","sum"), Count=("Opportunity Name","count")).reset_index().sort_values("Value", ascending=False)
@@ -597,7 +618,7 @@ if page == "Dashboard":
             text=[f"  {fc(v)}  ({c})" for v,c in zip(cu_top["Value"],cu_top["Count"])],
             textposition="outside", textfont=dict(size=10.5, color=G800),
         ))
-        pl(fig3, h=max(340, 40*len(cu_top)))
+        pl(fig3, h=max(380, 44*len(cu_top)))
         fig3.update_layout(showlegend=False, xaxis=dict(visible=False), yaxis=dict(tickfont=dict(size=10)))
         fig3.update_xaxes(showgrid=False, showline=False)
         fig3.update_yaxes(showgrid=False, showline=False)
@@ -616,7 +637,7 @@ if page == "Dashboard":
             line=dict(color=NY, width=2.5), marker=dict(size=5, color=NY), name="Cumulative %", yaxis="y2"))
         fig4.add_hline(y=80, line_dash="dot", line_color=RD, opacity=0.45, annotation_text="80 %",
             annotation_position="right", annotation_font=dict(size=9, color=RD), yref="y2")
-        pl(fig4, h=max(340, 40*len(cu_top)), mb=50)
+        pl(fig4, h=max(380, 44*len(cu_top)), mb=50)
         fig4.update_layout(
             yaxis=dict(visible=False),
             yaxis2=dict(title="Cumulative %", titlefont=dict(size=9), side="right", overlaying="y", range=[0,108], showgrid=False),
@@ -627,15 +648,15 @@ if page == "Dashboard":
         fig4.update_yaxes(showgrid=False, showline=False)
         st.plotly_chart(fig4, use_container_width=True)
 
-    spacer("lg")
+    spacer("xl")
 
     # ══════════════════════════════════════════════════════════════════════════
     # 5 — PRODUCT / SERVICE MIX
     # ══════════════════════════════════════════════════════════════════════════
     st.markdown('<div class="sec">5 · Product / Service Mix</div>', unsafe_allow_html=True)
-    spacer("sm")
+    spacer("md")
 
-    s3a, _, s3b = st.columns([0.52, 0.04, 0.44])
+    s3a, _, s3b = st.columns([0.50, 0.06, 0.44])
 
     with s3a:
         sv = fdf.groupby("Main Primary Service").agg(Value=("Opportunity PAR","sum"), Count=("Opportunity Name","count"),
@@ -649,7 +670,7 @@ if page == "Dashboard":
             textinfo="label+percent", textfont=dict(size=10.5),
             hovertemplate="<b>%{label}</b><br>$%{value:,.0f}<br>%{percent}<extra></extra>", sort=True,
         ))
-        pl(fig5, h=360)
+        pl(fig5, h=400)
         fig5.update_layout(showlegend=False)
         st.plotly_chart(fig5, use_container_width=True)
 
@@ -661,13 +682,13 @@ if page == "Dashboard":
             text=[f"  {fc(v)}  ({c} opps)" for v,c in zip(sv_s["Avg"],sv_s["Count"])],
             textposition="outside", textfont=dict(size=10, color=G800),
         ))
-        pl(fig6, h=360)
+        pl(fig6, h=400)
         fig6.update_layout(showlegend=False, xaxis=dict(visible=False), yaxis=dict(tickfont=dict(size=10)))
         fig6.update_xaxes(showgrid=False, showline=False)
         fig6.update_yaxes(showgrid=False, showline=False)
         st.plotly_chart(fig6, use_container_width=True)
 
-    spacer("md")
+    spacer("lg")
 
     # Service × Region Heatmap
     st.markdown('<p class="so">Service demand mapped by region</p>', unsafe_allow_html=True)
@@ -679,21 +700,21 @@ if page == "Dashboard":
         hovertemplate="Service: %{y}<br>Region: %{x}<br>Value: $%{z:,.0f}<extra></extra>",
         showscale=False, xgap=4, ygap=4,
     ))
-    pl(fig7, h=max(240, 42*len(ht)), mt=8)
+    pl(fig7, h=max(280, 48*len(ht)), mt=8)
     fig7.update_layout(xaxis=dict(tickfont=dict(size=10.5), side="top"), yaxis=dict(tickfont=dict(size=10.5), autorange="reversed"))
     fig7.update_xaxes(showgrid=False, showline=False)
     fig7.update_yaxes(showgrid=False, showline=False)
     st.plotly_chart(fig7, use_container_width=True)
 
-    spacer("lg")
+    spacer("xl")
 
     # ══════════════════════════════════════════════════════════════════════════
     # 6 — REGIONAL ANALYSIS
     # ══════════════════════════════════════════════════════════════════════════
     st.markdown('<div class="sec">6 · Regional Split</div>', unsafe_allow_html=True)
-    spacer("sm")
+    spacer("md")
 
-    r4a, _, r4b = st.columns([1, 0.04, 1])
+    r4a, _, r4b = st.columns([1, 0.06, 1])
 
     with r4a:
         rg = fdf.groupby("Owner Role").agg(Value=("Opportunity PAR","sum"), Count=("Opportunity Name","count"),
@@ -706,7 +727,7 @@ if page == "Dashboard":
             text=[f"{fc(v)}<br><span style='font-size:9px'>{c} opps · Avg {fc(a)}</span>" for v,c,a in zip(rg["Value"],rg["Count"],rg["Avg"])],
             textposition="inside", textfont=dict(size=11, color=W),
         ))
-        pl(fig8, h=350)
+        pl(fig8, h=390)
         fig8.update_layout(showlegend=False, yaxis=dict(visible=False), bargap=0.35)
         fig8.update_xaxes(showgrid=False, tickfont=dict(size=10.5))
         fig8.update_yaxes(showgrid=False, showline=False)
@@ -726,24 +747,24 @@ if page == "Dashboard":
                 x=rs_ht.index, y=rs_ht[col], name=col, marker_color=stg_colors.get(col, G400),
                 text=[fc(v) if v>0 else "" for v in rs_ht[col]], textposition="inside", textfont=dict(size=9, color=W),
             ))
-        pl(fig9, h=350, mb=16)
+        pl(fig9, h=390, mb=16)
         fig9.update_layout(barmode="stack", yaxis=dict(visible=False), bargap=0.3, legend=dict(font=dict(size=8.5)))
         fig9.update_xaxes(showgrid=False, tickfont=dict(size=10.5))
         fig9.update_yaxes(showgrid=False, showline=False)
         st.plotly_chart(fig9, use_container_width=True)
 
-    spacer("lg")
+    spacer("xl")
 
     # ══════════════════════════════════════════════════════════════════════════
     # 7 — SOLUTION RESOURCE WORKLOAD
     # ══════════════════════════════════════════════════════════════════════════
     st.markdown('<div class="sec">7 · Solution Resource Workload</div>', unsafe_allow_html=True)
-    spacer("sm")
+    spacer("md")
 
     rw = fdf.groupby("Solution Resource").agg(Value=("Opportunity PAR","sum"), Count=("Opportunity Name","count"),
         AvgDur=("Stage Duration","mean"), Cust=("Account Name","nunique")).reset_index().sort_values("Value", ascending=False)
 
-    r5a, _, r5b = st.columns([0.58, 0.04, 0.38])
+    r5a, _, r5b = st.columns([0.56, 0.06, 0.38])
 
     with r5a:
         st.markdown(f'<p class="so">{rw.iloc[0]["Solution Resource"]} carries the largest pipeline at {fc(rw.iloc[0]["Value"])}</p>' if len(rw) else '', unsafe_allow_html=True)
@@ -753,7 +774,7 @@ if page == "Dashboard":
         fig10.add_trace(go.Scatter(x=rw["Solution Resource"], y=rw["Value"], name="Total Value ($)",
             mode="markers+lines", marker=dict(color=GD, size=10, line=dict(width=1.5, color=NY)),
             line=dict(color=GD, width=2.5), yaxis="y2"))
-        pl(fig10, h=360, mb=55)
+        pl(fig10, h=400, mb=55)
         fig10.update_layout(
             yaxis=dict(title="# Opps", titlefont=dict(size=9.5), side="left"),
             yaxis2=dict(title="Value ($)", titlefont=dict(size=9.5), side="right", overlaying="y", showgrid=False),
@@ -773,9 +794,9 @@ if page == "Dashboard":
             if sc in rd.columns:
                 rd[sc] = rd[sc].astype(int)
                 display_cols.append(sc)
-        st.dataframe(rd[display_cols], use_container_width=True, height=360, hide_index=True)
+        st.dataframe(rd[display_cols], use_container_width=True, height=400, hide_index=True)
 
-    spacer("md")
+    spacer("lg")
 
     # Resource × Region
     st.markdown('<p class="so">Resource allocation by region</p>', unsafe_allow_html=True)
@@ -786,21 +807,21 @@ if page == "Dashboard":
         text=rr.values, texttemplate="%{text}", textfont=dict(size=12),
         showscale=False, xgap=4, ygap=4,
     ))
-    pl(fig11, h=max(220, 40*len(rr)), mt=8)
+    pl(fig11, h=max(260, 46*len(rr)), mt=8)
     fig11.update_layout(xaxis=dict(tickfont=dict(size=10.5), side="top"), yaxis=dict(tickfont=dict(size=10.5), autorange="reversed"))
     fig11.update_xaxes(showgrid=False, showline=False)
     fig11.update_yaxes(showgrid=False, showline=False)
     st.plotly_chart(fig11, use_container_width=True)
 
-    spacer("lg")
+    spacer("xl")
 
     # ══════════════════════════════════════════════════════════════════════════
     # 8 — TIMELINE & AGING
     # ══════════════════════════════════════════════════════════════════════════
     st.markdown('<div class="sec">8 · Timeline & Aging Analysis</div>', unsafe_allow_html=True)
-    spacer("sm")
+    spacer("md")
 
-    t6a, _, t6b = st.columns([1, 0.04, 1])
+    t6a, _, t6b = st.columns([1, 0.06, 1])
 
     with t6a:
         st.markdown('<p class="so">Expected revenue by close month</p>', unsafe_allow_html=True)
@@ -812,7 +833,7 @@ if page == "Dashboard":
             text=[f"{fc(v)}" for v in mo["Value"]], textposition="outside", textfont=dict(size=9.5)))
         fig12.add_trace(go.Scatter(x=mo["Month"], y=mo["Count"], mode="markers+lines",
             marker=dict(color=NY, size=7), line=dict(color=NY, width=2), name="# Opps", yaxis="y2"))
-        pl(fig12, h=360, mb=50)
+        pl(fig12, h=400, mb=50)
         fig12.update_layout(
             yaxis=dict(visible=False),
             yaxis2=dict(title="# Opps", titlefont=dict(size=9.5), side="right", overlaying="y", showgrid=False),
@@ -830,12 +851,12 @@ if page == "Dashboard":
             sd = fdf[fdf["Stage"]==s]
             fig13.add_trace(go.Box(y=sd["Stage Duration"], name=s, marker_color=TL, boxmean=True,
                 fillcolor=TLL, line=dict(color=TL)))
-        pl(fig13, h=360)
+        pl(fig13, h=400)
         fig13.update_layout(showlegend=False, yaxis=dict(title="Days", titlefont=dict(size=9.5)),
                             xaxis=dict(tickfont=dict(size=9.5)))
         st.plotly_chart(fig13, use_container_width=True)
 
-    spacer("md")
+    spacer("lg")
 
     # Bubble chart
     st.markdown('<p class="so">Opportunity landscape: value vs. stage duration — bubble size = deal value, color = stage</p>', unsafe_allow_html=True)
@@ -855,7 +876,7 @@ if page == "Dashboard":
     fig14.add_vline(x=60, line_dash="dot", line_color=RD, opacity=0.35,
                     annotation_text="60-day threshold", annotation_position="top",
                     annotation_font=dict(size=9, color=RD))
-    pl(fig14, h=400, mb=50)
+    pl(fig14, h=440, mb=50)
     fig14.update_layout(
         xaxis=dict(title="Stage Duration (days)", titlefont=dict(size=10.5)),
         yaxis=dict(title="PAR Value ($)", titlefont=dict(size=10.5)),
@@ -863,7 +884,7 @@ if page == "Dashboard":
     )
     st.plotly_chart(fig14, use_container_width=True)
 
-    spacer("md")
+    spacer("lg")
 
     # Aging table
     st.markdown('<p class="so">Aging flags — opportunities requiring attention</p>', unsafe_allow_html=True)
@@ -879,26 +900,26 @@ if page == "Dashboard":
         disp_ag = disp_ag.rename(columns={"Close Date Display": "Close Date"})
         st.dataframe(
             disp_ag.style.format({"Opportunity PAR":"${:,.0f}"}),
-            use_container_width=True, height=min(340, 38*len(ag_flagged)+38), hide_index=True,
+            use_container_width=True, height=min(380, 38*len(ag_flagged)+38), hide_index=True,
         )
     else:
         st.success("No aging flags — all opportunities within normal parameters.")
 
-    spacer("lg")
+    spacer("xl")
 
     # ══════════════════════════════════════════════════════════════════════════
     # 9 — RISK & CLOSED/LOST
     # ══════════════════════════════════════════════════════════════════════════
     st.markdown('<div class="sec">9 · Risk & Attention Items</div>', unsafe_allow_html=True)
-    spacer("sm")
+    spacer("md")
 
-    r7a, _, r7b = st.columns([1, 0.04, 1])
+    r7a, _, r7b = st.columns([1, 0.06, 1])
 
     with r7a:
         lost = fdf[fdf["Stage"]=="Closed/Lost"]
         if len(lost):
             st.markdown(f'<div class="al al-r"><b>{len(lost)} Closed/Lost</b> opportunities totaling <b>{fc(lost["Opportunity PAR"].sum())}</b></div>', unsafe_allow_html=True)
-            spacer("sm")
+            spacer("md")
             for _, r in lost.iterrows():
                 st.markdown(f"""
                 <div style="background:{W}; border:1px solid {G200}; border-radius:5px; padding:.8rem 1rem; margin-bottom:.5rem; font-size:.78rem;">
@@ -921,24 +942,24 @@ if page == "Dashboard":
                 text=[f"  {fc(v)} · {d}d" for v,d in zip(risk_top["Opportunity PAR"],risk_top["Stage Duration"])],
                 textposition="outside", textfont=dict(size=10.5, color=G800),
             ))
-            pl(fig15, h=260)
+            pl(fig15, h=300)
             fig15.update_layout(showlegend=False, xaxis=dict(visible=False), yaxis=dict(tickfont=dict(size=10)))
             fig15.update_xaxes(showgrid=False, showline=False)
             fig15.update_yaxes(showgrid=False, showline=False)
             st.plotly_chart(fig15, use_container_width=True)
 
-    spacer("lg")
+    spacer("xl")
 
     # ══════════════════════════════════════════════════════════════════════════
     # 10 — OPPORTUNITY OWNER ANALYSIS
     # ══════════════════════════════════════════════════════════════════════════
     st.markdown('<div class="sec">10 · Opportunity Owner Performance</div>', unsafe_allow_html=True)
-    spacer("sm")
+    spacer("md")
 
     ow = fdf.groupby("Opportunity Owner").agg(Value=("Opportunity PAR","sum"), Count=("Opportunity Name","count"),
         Avg=("Opportunity PAR","mean"), AvgDur=("Stage Duration","mean")).reset_index().sort_values("Value", ascending=False)
 
-    o8a, _, o8b = st.columns([0.55, 0.04, 0.41])
+    o8a, _, o8b = st.columns([0.53, 0.06, 0.41])
     with o8a:
         st.markdown('<p class="so">Top opportunity owners by pipeline value</p>', unsafe_allow_html=True)
         ow_top = ow.head(10).sort_values("Value", ascending=True)
@@ -947,7 +968,7 @@ if page == "Dashboard":
             text=[f"  {fc(v)} ({c})" for v,c in zip(ow_top["Value"],ow_top["Count"])],
             textposition="outside", textfont=dict(size=10, color=G800),
         ))
-        pl(fig16, h=max(320, 38*len(ow_top)))
+        pl(fig16, h=max(360, 42*len(ow_top)))
         fig16.update_layout(showlegend=False, xaxis=dict(visible=False), yaxis=dict(tickfont=dict(size=10)))
         fig16.update_xaxes(showgrid=False, showline=False)
         fig16.update_yaxes(showgrid=False, showline=False)
@@ -961,13 +982,13 @@ if page == "Dashboard":
         od["Avg Days"] = od["Avg Days"].apply(lambda x: f"{x:.0f}")
         st.dataframe(od, use_container_width=True, height=max(320, 38*len(ow_top)), hide_index=True)
 
-    spacer("lg")
+    spacer("xl")
 
     # ══════════════════════════════════════════════════════════════════════════
     # 11 — FULL PIPELINE TABLE
     # ══════════════════════════════════════════════════════════════════════════
     st.markdown('<div class="sec">11 · Full Pipeline Detail</div>', unsafe_allow_html=True)
-    spacer("sm")
+    spacer("md")
 
     tbl = fdf[["Stage","Status","Product","Account Name","Opportunity Name","Solution Resource","Opportunity Owner",
                "Main Primary Service","Opportunity PAR","Stage Duration","Close Date Display",
@@ -977,7 +998,7 @@ if page == "Dashboard":
     tbl = tbl.sort_values(["Stage","Opportunity PAR"], ascending=[True,False])
     st.dataframe(
         tbl.style.format({"Opportunity PAR":"${:,.0f}"}),
-        use_container_width=True, height=min(520, 38*len(tbl)+38), hide_index=True,
+        use_container_width=True, height=min(560, 38*len(tbl)+38), hide_index=True,
         column_config={
             "Account Name": st.column_config.TextColumn("Customer", width="medium"),
             "Opportunity Name": st.column_config.TextColumn("Opportunity", width="large"),
@@ -987,13 +1008,13 @@ if page == "Dashboard":
         },
     )
 
-    spacer("lg")
+    spacer("xl")
 
     # ══════════════════════════════════════════════════════════════════════════
     # 12 — EXECUTIVE SUMMARY
     # ══════════════════════════════════════════════════════════════════════════
     st.markdown('<div class="sec">12 · Executive Summary</div>', unsafe_allow_html=True)
-    spacer("sm")
+    spacer("md")
 
     top_c  = fdf.groupby("Account Name")["Opportunity PAR"].sum().idxmax() if n_opp else "N/A"
     top_cv = fdf.groupby("Account Name")["Opportunity PAR"].sum().max() if n_opp else 0
@@ -1055,7 +1076,7 @@ elif page == "Masterfile Manager":
     </div>
     """, unsafe_allow_html=True)
 
-    spacer("md")
+    spacer("lg")
 
     st.markdown('<div class="sec">Upload New Salesforce Export to Merge</div>', unsafe_allow_html=True)
     mf = st.file_uploader("Upload new SF export. Team columns will be preserved.", type=["xlsx","xls","csv"], key="mu")
@@ -1111,9 +1132,9 @@ elif page == "Masterfile Manager":
         st.session_state.master = edited.copy()
         st.success("Edits saved to session.")
 
-    spacer("md")
+    spacer("lg")
     st.markdown("---")
-    spacer("sm")
+    spacer("md")
     d1, d2, _ = st.columns([1,1,2])
     with d1:
         st.download_button("Download Masterfile (.xlsx)", data=to_excel(st.session_state.master),
