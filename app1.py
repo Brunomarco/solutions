@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
+import re
 from io import BytesIO
 from datetime import datetime
 
@@ -140,18 +141,50 @@ def parse_par(val):
 
 
 def fix_excel_eu_date(val):
-    """Fix dates where Excel misinterpreted DD/MM as MM/DD.
-    European-format columns (Received by Solutions, Closed by Solutions)
-    get mangled by Excel when day ≤ 12 — it swaps month and day.
-    Strings like '27/1/2026' survive; datetimes like 2026-10-02 need fixing."""
+    """Robust parser for Solutions date columns with mixed formats.
+    Handles: DD/M/YYYY strings, M/D/YY strings (2-digit year),
+    and Excel datetimes where month↔day was swapped on import.
+    Examples:
+        '27/1/2026'  → 27-Jan-2026   (DD/M/YYYY string)
+        '2/10/26'    → 10-Feb-2026   (M/DD/YY string)
+        '2/9/26'     → 09-Feb-2026   (M/D/YY string)
+        datetime(2026,10,2) → 10-Feb-2026  (Excel swapped 2/10/26)
+    """
     if pd.isna(val):
         return pd.NaT
+
+    # ── String input ─────────────────────────────────────────────────────
     if isinstance(val, str):
+        val = val.strip()
+        if not val:
+            return pd.NaT
+        parts = re.split(r'[/\-]', val)
+        if len(parts) == 3:
+            try:
+                a, b, c = [int(p) for p in parts]
+            except ValueError:
+                return pd.to_datetime(val, dayfirst=True, errors="coerce")
+            # Fix 2-digit year → 4-digit
+            yr = c if c > 100 else (2000 + c)
+            if a > 12:
+                # First number > 12 → must be the day → DD/MM/YYYY
+                return pd.Timestamp(year=yr, month=b, day=a)
+            elif b > 12:
+                # Second number > 12 → must be the day → MM/DD/YYYY
+                return pd.Timestamp(year=yr, month=a, day=b)
+            else:
+                # Both ≤ 12 — ambiguous: use M/D/YY (US short, common in SF)
+                try:
+                    return pd.Timestamp(year=yr, month=a, day=b)
+                except Exception:
+                    return pd.Timestamp(year=yr, month=b, day=a)
         return pd.to_datetime(val, dayfirst=True, errors="coerce")
+
+    # ── Datetime / Timestamp from Excel ──────────────────────────────────
     try:
         ts = pd.Timestamp(val)
-        # If the day component is ≤ 12, Excel likely swapped month ↔ day
-        if ts.day <= 12 and ts.month != ts.day:
+        # Excel read '2/10/26' as 2026-10-02 (Oct 2) — should be Feb 10
+        if ts.day <= 12 and ts.month > 2:
             return pd.Timestamp(year=ts.year, month=ts.day, day=ts.month)
         return ts
     except Exception:
@@ -395,6 +428,12 @@ if page == "Dashboard":
     n_unassigned = len(fdf[fdf["Status"]=="Unassigned"])
     n_products   = fdf[fdf["Product"]!="General"]["Product"].nunique()
 
+    # Solutions date metrics (used in KPIs and Section 2)
+    _rcv = fdf.dropna(subset=["Received by Solutions Parsed"]) if "Received by Solutions Parsed" in fdf.columns else pd.DataFrame()
+    _cls = fdf.dropna(subset=["Closed by Solutions Parsed"]) if "Closed by Solutions Parsed" in fdf.columns else pd.DataFrame()
+    n_received   = len(_rcv)
+    pct_received = f"{n_received/n_opp*100:.0f}%" if n_opp else "0%"
+
     # ── KPIs ─────────────────────────────────────────────────────────────────
     st.markdown(f"""
     <div class="kr">
@@ -402,7 +441,7 @@ if page == "Dashboard":
         <div class="kp" style="--ac:{NY};"><div class="kp-l">Customers</div><div class="kp-v">{n_cust}</div><div class="kp-d">Unique accounts</div></div>
         <div class="kp" style="--ac:{GD};"><div class="kp-l">Products in Scope</div><div class="kp-v">{n_svc}</div><div class="kp-d">{n_products} tagged product(s)</div></div>
         <div class="kp" style="--ac:{BA};"><div class="kp-l">Avg Deal Size</div><div class="kp-v">{fc(avg_deal)}</div><div class="kp-d">Per opportunity</div></div>
-        <div class="kp" style="--ac:{GN};"><div class="kp-l">Status: Working</div><div class="kp-v">{n_working}</div><div class="kp-d">{n_pending} pending · {n_unassigned} unassigned</div></div>
+        <div class="kp" style="--ac:{TL};"><div class="kp-l">Solutions Received</div><div class="kp-v">{n_received}</div><div class="kp-d">{pct_received} of pipeline</div></div>
         <div class="kp" style="--ac:{G400};"><div class="kp-l">Avg Stage Duration</div><div class="kp-v">{avg_dur:.0f}d</div><div class="kp-d">{len(aging_60)} over 60 days</div></div>
         <div class="kp" style="--ac:{RD};"><div class="kp-l">Past Close Date</div><div class="kp-v">{len(past_due)}</div><div class="kp-d">{fc(past_due['Opportunity PAR'].sum())} at risk</div></div>
     </div>
@@ -466,10 +505,30 @@ if page == "Dashboard":
     st.markdown('<div class="sec">2 · Solutions Status & Velocity</div>', unsafe_allow_html=True)
     spacer("md")
 
-    s2a, _, s2b, _, s2c = st.columns([0.32, 0.03, 0.32, 0.03, 0.27])
+    # ── Solutions Coverage KPIs ──────────────────────────────────────────
+    rcv_col = _rcv
+    cls_col = _cls
+    n_closed   = len(cls_col)
+    pct_closed = f"{n_closed/n_opp*100:.0f}%" if n_opp else "0%"
+    cycle_days = fdf["Solutions Cycle Days"].dropna()
+    avg_cycle  = f"{cycle_days.mean():.0f}d" if len(cycle_days) else "—"
+
+    st.markdown(f"""
+    <div class="kr">
+        <div class="kp" style="--ac:{TL};"><div class="kp-l">Received by Solutions</div><div class="kp-v">{n_received}</div><div class="kp-d">{pct_received} of pipeline</div></div>
+        <div class="kp" style="--ac:{GN};"><div class="kp-l">Closed by Solutions</div><div class="kp-v">{n_closed}</div><div class="kp-d">{pct_closed} of pipeline</div></div>
+        <div class="kp" style="--ac:{BA};"><div class="kp-l">Avg Cycle Time</div><div class="kp-v">{avg_cycle}</div><div class="kp-d">Received → Closed</div></div>
+        <div class="kp" style="--ac:{GN};"><div class="kp-l">Status: Working</div><div class="kp-v">{n_working}</div><div class="kp-d">{n_pending} pending · {n_unassigned} unassigned</div></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    spacer("md")
+
+    # ── Row 1: Status bar + Status donut ─────────────────────────────────
+    s2a, _, s2b = st.columns([0.52, 0.06, 0.42])
 
     with s2a:
-        st.markdown('<p class="so">Opportunity status distribution</p>', unsafe_allow_html=True)
+        st.markdown('<p class="so">Opportunity status distribution — workload snapshot</p>', unsafe_allow_html=True)
         stat_g = fdf.groupby("Status").agg(Value=("Opportunity PAR","sum"), Count=("Opportunity Name","count")).reset_index().sort_values("Count", ascending=False)
         stat_colors = [STATUS_COLORS.get(s, G400) for s in stat_g["Status"]]
         fig_stat = go.Figure(go.Bar(
@@ -478,13 +537,13 @@ if page == "Dashboard":
             textposition="outside", textfont=dict(size=11),
         ))
         pl(fig_stat, h=380, mb=16)
-        fig_stat.update_layout(showlegend=False, yaxis=dict(visible=False), bargap=0.35)
+        fig_stat.update_layout(showlegend=False, yaxis=dict(visible=False), bargap=0.4)
         fig_stat.update_xaxes(showgrid=False)
         fig_stat.update_yaxes(showgrid=False, showline=False)
         st.plotly_chart(fig_stat, use_container_width=True)
 
     with s2b:
-        st.markdown('<p class="so">Status × pipeline value</p>', unsafe_allow_html=True)
+        st.markdown('<p class="so">Status × pipeline value share</p>', unsafe_allow_html=True)
         fig_stat2 = go.Figure(go.Pie(
             labels=stat_g["Status"], values=stat_g["Value"], hole=.55,
             marker=dict(colors=stat_colors),
@@ -495,29 +554,73 @@ if page == "Dashboard":
         fig_stat2.update_layout(showlegend=False)
         st.plotly_chart(fig_stat2, use_container_width=True)
 
+    spacer("lg")
+
+    # ── Row 2: Solutions intake timeline + Lifecycle view ────────────────
+    s2c, _, s2d = st.columns([0.52, 0.06, 0.42])
+
     with s2c:
-        st.markdown('<p class="so">Solutions intake timeline</p>', unsafe_allow_html=True)
-        if "Received by Solutions Parsed" in fdf.columns:
-            rcv = fdf.dropna(subset=["Received by Solutions Parsed"]).copy()
-            if len(rcv):
-                rcv["Rcv Week"] = rcv["Received by Solutions Parsed"].dt.to_period("W").dt.to_timestamp()
-                wk = rcv.groupby("Rcv Week").agg(Count=("Opportunity Name","count"), Value=("Opportunity PAR","sum")).reset_index()
-                fig_rcv = go.Figure(go.Bar(x=wk["Rcv Week"], y=wk["Count"], marker_color=TL, name="Received",
-                    text=wk["Count"], textposition="outside", textfont=dict(size=10.5)))
-                pl(fig_rcv, h=380, mb=16)
-                fig_rcv.update_layout(showlegend=False, yaxis=dict(visible=False), bargap=0.3,
-                    xaxis=dict(tickformat="%d-%b", tickfont=dict(size=9.5)))
-                fig_rcv.update_xaxes(showgrid=False)
-                fig_rcv.update_yaxes(showgrid=False, showline=False)
-                st.plotly_chart(fig_rcv, use_container_width=True)
-            else:
-                st.info("No 'Received by Solutions' dates populated yet.")
+        st.markdown('<p class="so">Solutions intake timeline — when opportunities were received</p>', unsafe_allow_html=True)
+        if "Received by Solutions Parsed" in fdf.columns and len(rcv_col):
+            rcv_t = rcv_col.copy()
+            rcv_t["Rcv Week"] = rcv_t["Received by Solutions Parsed"].dt.to_period("W").dt.to_timestamp()
+            wk = rcv_t.groupby("Rcv Week").agg(Count=("Opportunity Name","count"), Value=("Opportunity PAR","sum")).reset_index().sort_values("Rcv Week")
+            fig_rcv = go.Figure()
+            fig_rcv.add_trace(go.Bar(x=wk["Rcv Week"], y=wk["Count"], marker_color=TL, name="Received",
+                text=[f"{c}<br><span style='font-size:9px;color:{G600}'>{fc(v)}</span>" for c,v in zip(wk["Count"],wk["Value"])],
+                textposition="outside", textfont=dict(size=10.5)))
+            pl(fig_rcv, h=380, mb=20)
+            fig_rcv.update_layout(showlegend=False, yaxis=dict(visible=False), bargap=0.35,
+                xaxis=dict(tickformat="%d-%b-%Y", tickfont=dict(size=9.5)))
+            fig_rcv.update_xaxes(showgrid=False)
+            fig_rcv.update_yaxes(showgrid=False, showline=False)
+            st.plotly_chart(fig_rcv, use_container_width=True)
         else:
-            st.info("'Received by Solutions' column not found.")
+            st.info("No 'Received by Solutions' dates populated yet.")
+
+    with s2d:
+        st.markdown('<p class="so">Solutions lifecycle — received vs. closed per opportunity</p>', unsafe_allow_html=True)
+        if "Received by Solutions Parsed" in fdf.columns and len(rcv_col):
+            lf = rcv_col[["Account Name","Received by Solutions Parsed","Closed by Solutions Parsed",
+                          "Opportunity PAR","Status"]].copy()
+            lf = lf.sort_values("Received by Solutions Parsed")
+            lf["End"] = lf["Closed by Solutions Parsed"].fillna(TODAY)
+            lf["Acct Short"] = lf["Account Name"].apply(lambda x: (x[:22]+"…") if len(str(x))>22 else x)
+            lf["Is Closed"] = lf["Closed by Solutions Parsed"].notna()
+
+            fig_lf = go.Figure()
+            for idx, row in lf.iterrows():
+                clr = GN if row["Is Closed"] else TL
+                fig_lf.add_trace(go.Bar(
+                    y=[row["Acct Short"]], x=[(row["End"]-row["Received by Solutions Parsed"]).days],
+                    base=[row["Received by Solutions Parsed"]],
+                    orientation="h", marker_color=clr, marker_line=dict(width=0),
+                    showlegend=False,
+                    hovertemplate=(
+                        f"<b>{row['Account Name']}</b><br>"
+                        f"Received: {fmt_date(row['Received by Solutions Parsed'])}<br>"
+                        f"{'Closed: '+fmt_date(row['Closed by Solutions Parsed']) if row['Is Closed'] else 'Open (in progress)'}<br>"
+                        f"Value: {fc(row['Opportunity PAR'])}<extra></extra>"
+                    ),
+                ))
+            # Add legend manually
+            fig_lf.add_trace(go.Bar(y=[None], x=[None], marker_color=GN, name="Closed", showlegend=True))
+            fig_lf.add_trace(go.Bar(y=[None], x=[None], marker_color=TL, name="Open", showlegend=True))
+            pl(fig_lf, h=max(380, 48*len(lf)), mb=20)
+            fig_lf.update_layout(
+                barmode="overlay", yaxis=dict(tickfont=dict(size=9.5), autorange="reversed"),
+                xaxis=dict(tickformat="%d-%b-%Y", tickfont=dict(size=9)),
+                legend=dict(font=dict(size=9), orientation="h", y=-0.12, x=0.5, xanchor="center"),
+            )
+            fig_lf.update_xaxes(showgrid=True, gridcolor=G200, gridwidth=0.4, showline=False)
+            fig_lf.update_yaxes(showgrid=False, showline=False)
+            st.plotly_chart(fig_lf, use_container_width=True)
+        else:
+            st.info("No lifecycle data available yet.")
 
     spacer("lg")
 
-    # Resource × Status heatmap
+    # ── Resource × Status heatmap ────────────────────────────────────────
     st.markdown('<p class="so">Solution Resource workload by status — identify capacity constraints and bottlenecks</p>', unsafe_allow_html=True)
     rs_stat = pd.crosstab(fdf["Solution Resource"], fdf["Status"], values=fdf["Opportunity Name"], aggfunc="count").fillna(0).astype(int)
     status_order = ["Working","Pending","Unassigned"]
@@ -1040,6 +1143,10 @@ and <b>{n_svc} service categories</b>.
 <b>Status overview:</b> Of all opportunities, <b>{n_working} are actively being worked</b>,
 {n_pending} are pending action, and {n_unassigned} remain unassigned.
 This signals capacity for re-prioritization across the Solutions team.
+<br><br>
+<b>Solutions velocity:</b> <b>{n_received} of {n_opp}</b> opportunities ({pct_received}) have been
+formally received by Solutions, and <b>{n_closed}</b> have been closed.
+Average cycle time (Received → Closed) is <b>{avg_cycle}</b>.
 <br><br>
 <b>Product tagging:</b> <b>{n_prod_tagged} of {n_opp}</b> opportunities have a product classification
 ({prod_list}). Expanding product tagging will improve pipeline segmentation and forecasting accuracy.
